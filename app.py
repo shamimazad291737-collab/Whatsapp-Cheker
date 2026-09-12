@@ -4,7 +4,6 @@ import asyncio
 from flask import Flask
 from threading import Thread
 
-# Fix event loop for Pyrogram on Python 3.10+
 try:
     loop = asyncio.get_event_loop()
 except RuntimeError:
@@ -18,18 +17,17 @@ from pyrogram.types import (
     KeyboardButton
 )
 
-# Render Web Server Keep-Alive Integration
+# Render & UptimeRobot Integration (Keep Alive Server)
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "REX WS CHECKER Bot is Running Live!"
+    return "REX WS CHECKER Bot is Active & Pinged!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# Environment Variables
 API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -41,14 +39,12 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
-# Telegram Premium Animated Custom Emojis (HTML Tag Format)
-# বোট থেকে আসল ID পাওয়ার পর প্লেসহোল্ডার ID গুলো পরিবর্তন করে দিন
+# Custom Emoji Placeholders (বোটের রেসপন্স থেকে ID পাওয়ার পর নিচের ডিজিটগুলো বদলে দিন)
 EMOJI_REGISTERED = '<tg-emoji id="5368324170671202286">✅</tg-emoji>'
 EMOJI_NO_ACCOUNT = '<tg-emoji id="5368324170671202287">⚠️</tg-emoji>'
 EMOJI_BANNED = '<tg-emoji id="5368324170671202288">🚫</tg-emoji>'
 EMOJI_BOT = '<tg-emoji id="5467472918826501234">⚡</tg-emoji>'
 
-# Screen Bottom Panel Buttons
 MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🎁 Check Numbers"), KeyboardButton("👛 My Profile")],
@@ -73,7 +69,6 @@ async def check_whatsapp_status(phone_number):
         return "No Account"
     return "Registered"
 
-# Start Command
 @bot.on_message(filters.command("start"))
 async def start_cmd(client, message: Message):
     welcome_msg = (
@@ -84,32 +79,30 @@ async def start_cmd(client, message: Message):
         f"{EMOJI_NO_ACCOUNT} <b>No Account:</b> হোয়াটসঅ্যাপ অ্যাকাউন্ট খোলা নেই\n"
         f"{EMOJI_BANNED} <b>Banned:</b> অ্যাকাউন্ট নষ্ট বা ব্যানড"
     )
-    
     await message.reply_text(
         welcome_msg, 
         parse_mode=enums.ParseMode.HTML, 
         reply_markup=MAIN_REPLY_KEYBOARD
     )
 
-# Text & Main Handler
 @bot.on_message(filters.text & filters.private)
 async def handle_text_numbers(client, message: Message):
-    #১. প্রিমিয়াম ইমোজি ডিটেক্টর (বটে Premium Emoji পাঠালে ID বলে দেবে)
+    # ১. কাস্টম ইমোজি আইডি ডিটেক্টর (মেসেজে প্রিমিয়াম ইমোজি পেলে ID প্রদান করবে)
     if message.entities:
         for entity in message.entities:
             if entity.type == enums.MessageEntityType.CUSTOM_EMOJI:
                 await message.reply_text(
                     f"✨ <b>Custom Emoji ID Found!</b>\n\n"
-                    f"Emoji ID: <code>{entity.custom_emoji_id}</code>\n\n"
-                    f"কোডে ব্যবহার করুন:\n"
+                    f"ID: <code>{entity.custom_emoji_id}</code>\n\n"
+                    f"কোডে বসানোর নিয়ম:\n"
                     f"<code>&lt;tg-emoji id=\"{entity.custom_emoji_id}\"&gt;✅&lt;/tg-emoji&gt;</code>",
                     parse_mode=enums.ParseMode.HTML
                 )
                 return
 
-    # ২. বাটন হ্যান্ডলিং
+    # ২. মেনু বাটন হ্যান্ডলিং
     if message.text == "🎁 Check Numbers":
-        await message.reply_text("📥 আপনার নম্বরগুলোর লিস্ট পাঠ লিখুন অথবা <code>.txt</code> ফাইল পাঠান।", parse_mode=enums.ParseMode.HTML)
+        await message.reply_text("📥 আপনার নম্বরগুলোর লিস্ট পাঠান অথবা <code>.txt</code> ফাইল দিন।", parse_mode=enums.ParseMode.HTML)
         return
     elif message.text == "👛 My Profile":
         await message.reply_text("👤 <b>ইউজার প্রোফাইল:</b>\n\nস্ট্যাটাস: VIP Access\nটোটাল চেকড: 100+", parse_mode=enums.ParseMode.HTML)
@@ -127,11 +120,10 @@ async def handle_text_numbers(client, message: Message):
         await message.reply_text("💬 এডমিন সাপোর্টের জন্য যোগাযোগ করুন: @XSAIM_X9", parse_mode=enums.ParseMode.HTML)
         return
 
-    # ৩. নম্বর চেকিং লজিক
+    # ৩. নম্বর চেকিং প্রসেসিং
     numbers = extract_numbers(message.text)
-    
     if not numbers:
-        await message.reply_text("❌ কোনো সঠিক নম্বর পাওয়া যায়নি! সঠিক দেশের কোড সহ নম্বর দিন।")
+        await message.reply_text("❌ কোনো সঠিক নম্বর পাওয়া যায়নি! দেশের কোড সহ নম্বর দিন।")
         return
 
     status_msg = await message.reply_text(f"⏳ <b>প্রসেসিং চলছে...</b>\nমোট নম্বর: <code>{len(numbers)}</code> টি", parse_mode=enums.ParseMode.HTML)
@@ -154,7 +146,6 @@ async def handle_text_numbers(client, message: Message):
 
     await status_msg.edit_text(result_text, parse_mode=enums.ParseMode.HTML)
 
-# .txt File Handler
 @bot.on_message(filters.document & filters.private)
 async def handle_file_numbers(client, message: Message):
     if not message.document.file_name.endswith('.txt'):
