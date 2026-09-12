@@ -22,9 +22,6 @@ API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-if not all([API_ID, API_HASH, BOT_TOKEN]):
-    print("⚠️ Warning: Required Environment Variables (API_ID, API_HASH, BOT_TOKEN) are missing!")
-
 bot = Client(
     "wa_checker_bot",
     api_id=int(API_ID) if API_ID else 0,
@@ -134,16 +131,12 @@ async def handle_file_numbers(client, message: Message):
     if os.path.exists(result_filename):
         os.remove(result_filename)
 
-async def main():
-    # Start Keep-Alive Flask Server
-    Thread(target=run_flask, daemon=True).start()
-    # Start Bot Async Loop
-    await bot.start()
-    print("Bot is successfully running!")
-    await asyncio.Event().wait()
-
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main())
+    # Start Keep-Alive Flask Server in Background Thread
+    server_thread = Thread(target=run_flask)
+    server_thread.daemon = True
+    server_thread.start()
     
+    # Start Native Pyrogram Runner
+    bot.run()
+                                   
