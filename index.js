@@ -18,7 +18,7 @@ let waSocket = null;
 let isConnected = false;
 let userStates = {};
 
-// নিচের রিপ্লাই কিবোর্ডে "Link WhatsApp" সহ লেআউট সাজানো
+// নিচের রিপ্লাই কিবোর্ড লেআউট
 const replyMenu = new Keyboard()
     .text("🎁 Check Numbers").text("🔗 Link WhatsApp").row()
     .text("🎂 My Profile").text("📊 Status Info").row()
@@ -52,16 +52,15 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
         setTimeout(async () => {
             try {
                 let code = await waSocket.requestPairingCode(phoneNumber);
-                let customFormatCode = `RX${code?.match(/.{1,4}/g)?.join("RX") || code}RX`;
 
                 await bot.api.sendMessage(
                     chatId,
                     `🔗 <b>আপনার হোয়াটসঅ্যাপ পেয়ারিং কোড:</b>\n\n` +
-                    `<code>${customFormatCode}</code>\n\n` +
+                    `<code>${code}</code>\n\n` +
                     `<b>কীভাবে কানেক্ট করবেন:</b>\n` +
                     `১. আপনার হোয়াটসঅ্যাপ অ্যাপে যান।\n` +
                     `২. Settings > Linked Devices > Link a Device-এ যান।\n` +
-                    `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই কোডটি দিন।`,
+                    `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই ৮ ডিজিটের কোডটি দিন।`,
                     { parse_mode: "HTML" }
                 );
             } catch (e) {
@@ -178,3 +177,4 @@ bot.command("link", async (ctx) => {
 });
 
 bot.start();
+    
