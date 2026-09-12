@@ -18,7 +18,7 @@ let waSocket = null;
 let isConnected = false;
 let userStates = {};
 
-// স্ক্রিনশটের মতো স্থায়ী রিপ্লাই কিবোর্ড ডিজাইন
+// আপনার ছবির সাথে হুবহু মিল রেখে নিচের স্থায়ী রিপ্লাই কিবোর্ড ডিজাইন
 const replyMenu = new ReplyKeyboard()
     .text("🎁 Check Numbers").text("🎂 My Profile").row()
     .text("📊 Status Info").text("⚙️ Settings").row()
@@ -72,13 +72,13 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
     }
 }
 
-// /start কমান্ড এবং মেনু সহ রিপ্লাই কিবোর্ড পাঠানো
+// /start কমান্ড এবং নিচের রিপ্লাই কিবোর্ড পাঠানো
 bot.command("start", async (ctx) => {
     const welcomeMsg = `⚡ <b>REX WS CHECKER BOT</b> ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n\nনম্বর লিংক করতে লিখুন: <code>/link আপনারনম্বর</code>\nউদাহরণ: <code>/link 88017XXXXXXXX</code>`;
     await ctx.reply(welcomeMsg, { parse_mode: "HTML", reply_markup: replyMenu });
 });
 
-// টেক্সট মেসেজ ও বাটন রেসপন্স হ্যান্ডলার
+// টেক্সট মেসেজ ও মেনু বাটন হ্যান্ডলার
 bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;
     const userId = ctx.from.id;
@@ -86,7 +86,7 @@ bot.on("message:text", async (ctx) => {
 
     if (text.startsWith("/")) return;
 
-    // মেনু বাটনের কাজগুলো হ্যান্ডেল করা
+    // মেনু বাটনের রেসপন্স
     if (text === "🎁 Check Numbers") {
         await ctx.reply("📥 চেকের জন্য নম্বরগুলোর লিস্ট বা মেসেজ পাঠান।", { parse_mode: "HTML" });
         return;
@@ -110,7 +110,6 @@ bot.on("message:text", async (ctx) => {
         return;
     }
 
-    // লিংকের জন্য নম্বর ইনপুট নেওয়া
     if (userStates[userId] === "waiting_for_phone") {
         const phone = text.replace(/\D/g, "");
         if (phone.length < 10) {
@@ -174,4 +173,4 @@ bot.command("link", async (ctx) => {
 });
 
 bot.start();
-            
+        
