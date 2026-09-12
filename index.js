@@ -1,7 +1,9 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require("@whiskeysockets/baileys");
 const { Bot, Keyboard } = require("grammy");
 const pino = require("pino");
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 
 // রেন্ডার সার্ভার সচল রাখার জন্য HTTP সার্ভার
 const server = http.createServer((req, res) => {
@@ -27,30 +29,40 @@ const replyMenu = new Keyboard()
 
 // পেয়ারিং কোড দিয়ে হোয়াটসঅ্যাপ কানেক্ট করার ফাংশন
 async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
-    const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+    // আগের করাপ্টেড সেশন ফাইল ক্লিয়ার করা যাতে ফ্রেশ কানেকশন হয়
+    const authFolder = "auth_info_baileys";
+    if (fs.existsSync(authFolder)) {
+        fs.rmSync(authFolder, { recursive: true, force: true });
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     
     waSocket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
+        browser: Browsers.ubuntu("Chrome"), // ক্লাউডে বাইপাস করার জন্য ব্রাউজার ফিক্স
         logger: pino({ level: "silent" })
     });
 
     waSocket.ev.on("creds.update", saveCreds);
 
     waSocket.ev.on("connection.update", async (update) => {
-        const { connection } = update;
+        const { connection, lastDisconnect } = update;
         if (connection === "open") {
             isConnected = true;
             console.log("WhatsApp Connected Successfully!");
             await bot.api.sendMessage(chatId, "✅ <b>হোয়াটসঅ্যাপ সফলভাবে লিংক হয়েছে!</b> এখন আপনি নম্বর চেক করতে পারবেন।", { parse_mode: "HTML" });
         } else if (connection === "close") {
             isConnected = false;
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            console.log("Connection closed due to ", lastDisconnect?.error);
         }
     });
 
-    if (!waSocket.authState.creds.registered) {
-        setTimeout(async () => {
-            try {
+    // সকেট রেডি হওয়ার পর পেয়ারিং কোড রিকোয়েস্ট করা
+    setTimeout(async () => {
+        try {
+            if (!waSocket.authState.creds.registered) {
                 let code = await waSocket.requestPairingCode(phoneNumber);
 
                 await bot.api.sendMessage(
@@ -63,12 +75,12 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
                     `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই ৮ ডিজিটের কোডটি দিন।`,
                     { parse_mode: "HTML" }
                 );
-            } catch (e) {
-                console.log("Pairing Error:", e);
-                await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
             }
-        }, 3000);
-    }
+        } catch (e) {
+            console.log("Pairing Error:", e);
+            await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+        }
+    }, 5000);
 }
 
 // /start কমান্ড এবং রিপ্লাই কিবোর্ড পাঠানো
@@ -177,4 +189,3 @@ bot.command("link", async (ctx) => {
 });
 
 bot.start();
-    
