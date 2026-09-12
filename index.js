@@ -1,18 +1,9 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
-const { Bot, Keyboard } = require("grammy");
-const pino = require("pino");
-const http = require("http");
-const fs = require("fs");
+const { default: makeWASocket, useMultiFileAuthState, Browsers, DisconnectReason } = require('@whiskeysockets/baileys');
+const { Bot, Keyboard } = require('grammy');
+const fs = require('fs');
 
-// রেন্ডার সার্ভার সচল রাখার জন্য HTTP সার্ভার
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("REX WS CHECKER Bot Active");
-});
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`HTTP Server running on port ${PORT}`));
-
-const BOT_TOKEN = process.env.BOT_TOKEN || "YOUR_BOT_TOKEN_HERE";
+// ক্লাউডের এনভায়রনমেন্ট ভ্যারিয়েবল থেকে টোকেন নেবে, না পেলে সরাসরি কাজ করবে
+const BOT_TOKEN = process.env.BOT_TOKEN || '8828385782:AAG1W02m2glBA4jI3jVFyBMk1-6Ly296HBk';
 const bot = new Bot(BOT_TOKEN);
 
 let waSocket = null;
@@ -20,174 +11,105 @@ let isConnected = false;
 let userStates = {};
 
 const replyMenu = new Keyboard()
-    .text("🎁 Check Numbers").text("🔗 Link WhatsApp").row()
-    .text("🎂 My Profile").text("📊 Status Info").row()
-    .text("⚙️ Settings").text("🆘 Support")
+    .text('🎁 Check Numbers').text('🔗 Link WhatsApp').row()
+    .text('🎂 My Profile').text('📊 Status Info').row()
+    .text('⚙️ Settings').text('🆘 Support')
     .resized();
 
-async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
-    const authFolder = "auth_info_baileys";
-    if (fs.existsSync(authFolder)) {
-        fs.rmSync(authFolder, { recursive: true, force: true });
-    }
+async function startWhatsApp(chatId = null) {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { version } = await fetchLatestBaileysVersion();
-    
     waSocket = makeWASocket({
-        version,
         auth: state,
         printQRInTerminal: false,
-        // হোয়াটসঅ্যাপ সার্ভার যাতে রিজেক্ট না করে, তাই স্ট্যান্ডার্ড ক্রোম অন ম্যাকবুক ব্রাউজার দেওয়া হলো
-        browser: Browsers.macOS("Chrome"), 
-        syncFullHistory: false,
-        logger: pino({ level: "silent" })
+        browser: Browsers.macOS('Chrome'),
+        logger: require('pino')({ level: 'silent' })
     });
 
-    waSocket.ev.on("creds.update", saveCreds);
+    waSocket.ev.on('creds.update', saveCreds);
 
-    waSocket.ev.on("connection.update", async (update) => {
+    waSocket.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === "open") {
+        if (connection === 'open') {
             isConnected = true;
-            console.log("WhatsApp Connected Successfully!");
-            await bot.api.sendMessage(chatId, "✅ <b>হোয়াটসঅ্যাপ সফলভাবে লিংক হয়েছে!</b> এখন আপনি নম্বর চেক করতে পারবেন।", { parse_mode: "HTML" });
-        } else if (connection === "close") {
+            if (chatId) bot.api.sendMessage(chatId, '✅ <b>হোয়াটসঅ্যাপ সফলভাবে লিংক হয়েছে!</b>', { parse_mode: 'HTML' });
+        } else if (connection === 'close') {
             isConnected = false;
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            console.log("Connection closed due to statusCode:", statusCode);
-            
-            if (statusCode === DisconnectReason.loggedOut) {
-                if (fs.existsSync(authFolder)) {
-                    fs.rmSync(authFolder, { recursive: true, force: true });
-                }
+            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            if (shouldReconnect) {
+                setTimeout(() => startWhatsApp(), 3000);
             }
         }
     });
-
-    // সঠিক সময়ে ডেটা সিঙ্ক হওয়ার পর পেয়ারিং কোডের জন্য রিকোয়েস্ট পাঠানো
-    setTimeout(async () => {
-        try {
-            if (!waSocket.authState.creds.registered) {
-                let code = await waSocket.requestPairingCode(phoneNumber);
-
-                await bot.api.sendMessage(
-                    chatId,
-                    `🔗 <b>আপনার হোয়াটসঅ্যাপ পেয়ারিং কোড:</b>\n\n` +
-                    `<code>${code}</code>\n\n` +
-                    `<b>কীভাবে কানেক্ট করবেন:</b>\n` +
-                    `১. আপনার হোয়াটসঅ্যাপ অ্যাপে যান।\n` +
-                    `২. Settings > Linked Devices > Link a Device-এ যান।\n` +
-                    `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই কোডটি দিন।`,
-                    { parse_mode: "HTML" }
-                );
-            }
-        } catch (e) {
-            console.log("Pairing Error:", e);
-            await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। সার্ভার থেকে রিকোয়েস্ট ব্লক করা হতে পারে, কিছুক্ষণ পর আবার চেষ্টা করুন।");
-        }
-    }, 8000); // সময় বাড়িয়ে ৮ সেকেন্ড করা হলো যাতে কোনো ল্যাগ না থাকে
 }
 
-bot.command("start", async (ctx) => {
-    const welcomeMsg = `⚡ <b>REX WS CHECKER BOT</b> ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n\nনম্বর চেক করতে নিচের মেনু থেকে অপশন বেছে নিন।`;
-    await ctx.reply(welcomeMsg, { parse_mode: "HTML", reply_markup: replyMenu });
+startWhatsApp();
+
+bot.command('start', (ctx) => {
+    ctx.reply('⚡ <b>REX WS CHECKER BOT</b> ⚡\nনম্বর চেক করতে নিচের মেনু ব্যবহার করুন।', {
+        parse_mode: 'HTML',
+        reply_markup: replyMenu
+    });
 });
 
-bot.on("message:text", async (ctx) => {
+bot.on('message:text', async (ctx) => {
     const text = ctx.message.text;
     const userId = ctx.from.id;
     const chatId = ctx.chat.id;
 
-    if (text.startsWith("/")) return;
+    if (text.startsWith('/')) return;
 
-    if (text === "🎁 Check Numbers") {
-        await ctx.reply("📥 চেকের জন্য নম্বরগুলোর লিস্ট বা মেসেজ পাঠান।", { parse_mode: "HTML" });
-        return;
-    }
-    if (text === "🔗 Link WhatsApp") {
-        userStates[userId] = "waiting_for_phone";
-        await ctx.reply("📱 আপনার হোয়াটসঅ্যাপ নম্বরটি কান্ট্রি কোডসহ পাঠান (যেমন: <code>88017XXXXXXXXX</code>):", { parse_mode: "HTML" });
-        return;
-    }
-    if (text === "🎂 My Profile") {
-        const linkStatus = isConnected ? "✅ Connected" : "❌ Not Connected";
-        await ctx.reply(`👤 <b>ইউজার প্রোফাইল:</b>\n\nহোয়াটসঅ্যাপ স্ট্যাটাস: ${linkStatus}`, { parse_mode: "HTML" });
-        return;
-    }
-    if (text === "📊 Status Info") {
-        const infoText = `📊 <b>স্ট্যাটাস নির্দেশিকা:</b>\n\n✅ <b>Registered:</b> হোয়াটসঅ্যাপ চালু আছে\n⚠️ <b>No Account:</b> অ্যাকাউন্ট নেই`;
-        await ctx.reply(infoText, { parse_mode: "HTML" });
-        return;
-    }
-    if (text === "⚙️ Settings") {
-        await ctx.reply("⚙️ <b>সেটিংস:</b>\n\nনম্বর লিংক করতে নিচের <b>🔗 Link WhatsApp</b> বাটন ব্যবহার করুন।", { parse_mode: "HTML" });
-        return;
-    }
-    if (text === "🆘 Support") {
-        await ctx.reply("💬 এডমিন সাপোর্ট: @XSAIM_X9", { parse_mode: "HTML" });
-        return;
+    if (text === '🔗 Link WhatsApp') {
+        userStates[userId] = 'waiting_for_phone';
+        return ctx.reply('📱 আপনার হোয়াটসঅ্যাপ নম্বরটি কান্ট্রি কোডসহ পাঠান (যেমন: <code>88017XXXXXXXXX</code>):', { parse_mode: 'HTML' });
     }
 
-    if (userStates[userId] === "waiting_for_phone") {
-        const phone = text.replace(/\D/g, "");
-        if (phone.length < 10) {
-            await ctx.reply("❌ সঠিক নম্বর দিন। আবার চেষ্টা করুন।");
-            return;
-        }
+    if (userStates[userId] === 'waiting_for_phone') {
         delete userStates[userId];
-        await ctx.reply(`⏳ <code>+${phone}</code> নম্বরের জন্য পেয়ারিং কোড তৈরি করা হচ্ছে...`, { parse_mode: "HTML" });
-        connectWhatsAppWithPairingCode(phone, ctx, chatId);
+        const phone = text.replace(/\D/g, '');
+        await ctx.reply(`⏳ <code>+${phone}</code> নম্বরের জন্য পেয়ারিং কোড তৈরি হচ্ছে...`, { parse_mode: 'HTML' });
+        
+        await startWhatsApp(chatId);
+        setTimeout(async () => {
+            try {
+                let code = await waSocket.requestPairingCode(phone);
+                bot.api.sendMessage(chatId, `🔗 <b>পেয়ারিং কোড:</b> <code>${code}</code>\n\nহোয়াটসঅ্যাপে Linked Devices > Link with phone number instead-এ গিয়ে এই কোডটি দিন।`, { parse_mode: 'HTML' });
+            } catch (e) {
+                bot.api.sendMessage(chatId, '❌ কোড আনতে সমস্যা হয়েছে। আবার নম্বর দিয়ে চেষ্টা করুন।');
+            }
+        }, 4000);
         return;
     }
 
-    const rawNumbers = text.match(/\+?\d{10,15}/g) || [];
-    const numbers = [...new Set(rawNumbers.map(n => n.replace(/\D/g, '')))];
-
+    const numbers = [...new Set((text.match(/\+?\d{10,15}/g) || []).map(n => n.replace(/\D/g, '')))];
     if (numbers.length === 0) return;
 
     if (!isConnected || !waSocket) {
-        await ctx.reply("❌ প্রথমে আপনার হোয়াটসঅ্যাপ অ্যাকাউন্ট লিংক করুন! নিচের <b>🔗 Link WhatsApp</b> বাটনে ক্লিক করুন।", { parse_mode: "HTML" });
-        return;
+        return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
     }
 
-    const statusMsg = await ctx.reply(`⏳ <b>প্রসেসিং চলছে...</b>\nমোট নম্বর: <code>${numbers.length}</code> টি`, { parse_mode: "HTML" });
-
-    let registered = [];
-    let no_account = [];
+    const statusMsg = await ctx.reply(`⏳ চেক করা হচ্ছে... মোট নম্বর: ${numbers.length}`);
+    let registered = [], no_account = [];
 
     for (let num of numbers) {
         try {
-            const jid = `${num}@s.whatsapp.net`;
-            const [result] = await waSocket.onWhatsApp(jid);
-            
-            if (result && result.exists) {
+            const [res] = await waSocket.onWhatsApp(num + '@s.whatsapp.net');
+            if (res && res.exists) {
                 registered.push(`✅ <code>+${num}</code>`);
             } else {
                 no_account.push(`⚠️ <code>+${num}</code>`);
             }
-        } catch (e) {
-            no_account.api ? null : no_account.push(`⚠️ <code>+${num}</code>`);
+        } catch {
+            no_account.push(`⚠️ <code>+${num}</code>`);
         }
     }
 
-    let resultText = `📊 <b>চেক ফলাফল (Total: ${numbers.length}):</b>\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    resultText += `✅ <b>Registered (${registered.length}):</b>\n` + (registered.slice(0, 30).join("\n") || "None");
-    resultText += `\n\n⚠️ <b>No Account (${no_account.length}):</b>\n` + (no_account.slice(0, 20).join("\n") || "None");
+    let resText = `📊 <b>ফলাফল:</b>\n\n✅ Registered (${registered.length}):\n` + 
+        (registered.slice(0, 20).join('\n') || 'None') + 
+        `\n\n⚠️ No Account (${no_account.length}):\n` + 
+        (no_account.slice(0, 20).join('\n') || 'None');
 
-    await ctx.api.editMessageText(chatId, statusMsg.message_id, resultText, { parse_mode: "HTML" });
-});
-
-bot.command("link", async (ctx) => {
-    const text = ctx.match;
-    const phone = text.replace(/\D/g, "");
-    
-    if (phone.length < 10) {
-        await ctx.reply("❌ সঠিক নম্বর দিন। উদাহরণ: <code>/link 88017XXXXXXXX</code>", { parse_mode: "HTML" });
-    }
-
-    await ctx.reply(`⏳ <code>+${phone}</code> নম্বরের জন্য পেয়ারিং কোড তৈরি করা হচ্ছে...`, { parse_mode: "HTML" });
-    connectWhatsAppWithPairingCode(phone, ctx, ctx.chat.id);
+    await bot.api.editMessageText(chatId, statusMsg.message_id, resText, { parse_mode: 'HTML' });
 });
 
 bot.start();
