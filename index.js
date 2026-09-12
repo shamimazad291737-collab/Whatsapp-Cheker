@@ -1,9 +1,8 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const { Bot, Keyboard } = require("grammy");
 const pino = require("pino");
 const http = require("http");
 const fs = require("fs");
-const path = require("path");
 
 // রেন্ডার সার্ভার সচল রাখার জন্য HTTP সার্ভার
 const server = http.createServer((req, res) => {
@@ -29,18 +28,20 @@ const replyMenu = new Keyboard()
 
 // পেয়ারিং কোড দিয়ে হোয়াটসঅ্যাপ কানেক্ট করার ফাংশন
 async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
-    // আগের করাপ্টেড সেশন ফাইল ক্লিয়ার করা যাতে ফ্রেশ কানেকশন হয়
     const authFolder = "auth_info_baileys";
     if (fs.existsSync(authFolder)) {
         fs.rmSync(authFolder, { recursive: true, force: true });
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+    const { version } = await fetchLatestBaileysVersion();
     
     waSocket = makeWASocket({
+        version,
         auth: state,
         printQRInTerminal: false,
-        browser: Browsers.ubuntu("Chrome"), // ক্লাউডে বাইপাস করার জন্য ব্রাউজার ফিক্স
+        browser: Browsers.macOS("Desktop"), // ক্লাউড বাইপাস করার জন্য সঠিক ব্রাউজার ফিক্স
+        syncFullHistory: false,
         logger: pino({ level: "silent" })
     });
 
@@ -54,12 +55,18 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
             await bot.api.sendMessage(chatId, "✅ <b>হোয়াটসঅ্যাপ সফলভাবে লিংক হয়েছে!</b> এখন আপনি নম্বর চেক করতে পারবেন।", { parse_mode: "HTML" });
         } else if (connection === "close") {
             isConnected = false;
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            console.log("Connection closed due to ", lastDisconnect?.error);
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            console.log("Connection closed due to statusCode:", statusCode);
+            
+            if (statusCode === DisconnectReason.loggedOut) {
+                if (fs.existsSync(authFolder)) {
+                    fs.rmSync(authFolder, { recursive: true, force: true });
+                }
+            }
         }
     });
 
-    // সকেট রেডি হওয়ার পর পেয়ারিং কোড রিকোয়েস্ট করা
+    // সঠিক সময়ে পেয়ারিং কোডের জন্য রিকোয়েস্ট পাঠানো
     setTimeout(async () => {
         try {
             if (!waSocket.authState.creds.registered) {
@@ -72,15 +79,15 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
                     `<b>কীভাবে কানেক্ট করবেন:</b>\n` +
                     `১. আপনার হোয়াটসঅ্যাপ অ্যাপে যান।\n` +
                     `২. Settings > Linked Devices > Link a Device-এ যান।\n` +
-                    `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই ৮ ডিজিটের কোডটি দিন।`,
+                    `৩. নিচে থাকা <b>'Link with phone number instead'</b> এ ক্লিক করুন এবং এই কোডটি দিন।`,
                     { parse_mode: "HTML" }
                 );
             }
         } catch (e) {
             console.log("Pairing Error:", e);
-            await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+            await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। সার্ভার থেকে রিকোয়েস্ট ব্লক করা হতে পারে, কিছুক্ষণ পর আবার চেষ্টা করুন।");
         }
-    }, 5000);
+    }, 6000);
 }
 
 // /start কমান্ড এবং রিপ্লাই কিবোর্ড পাঠানো
@@ -97,7 +104,6 @@ bot.on("message:text", async (ctx) => {
 
     if (text.startsWith("/")) return;
 
-    // মেনু বাটনের রেসপন্স
     if (text === "🎁 Check Numbers") {
         await ctx.reply("📥 চেকের জন্য নম্বরগুলোর লিস্ট বা মেসেজ পাঠান।", { parse_mode: "HTML" });
         return;
@@ -181,7 +187,6 @@ bot.command("link", async (ctx) => {
     
     if (phone.length < 10) {
         await ctx.reply("❌ সঠিক নম্বর দিন। উদাহরণ: <code>/link 88017XXXXXXXX</code>", { parse_mode: "HTML" });
-        return;
     }
 
     await ctx.reply(`⏳ <code>+${phone}</code> নম্বরের জন্য পেয়ারিং কোড তৈরি করা হচ্ছে...`, { parse_mode: "HTML" });
