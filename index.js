@@ -2,7 +2,6 @@ const { default: makeWASocket, useMultiFileAuthState, Browsers, DisconnectReason
 const { Bot, Keyboard } = require('grammy');
 const fs = require('fs');
 
-// ক্লাউডের এনভায়রনমেন্ট ভ্যারিয়েবল থেকে টোকেন নেবে, না পেলে সরাসরি কাজ করবে
 const BOT_TOKEN = process.env.BOT_TOKEN || '8828385782:AAG1W02m2glBA4jI3jVFyBMk1-6Ly296HBk';
 const bot = new Bot(BOT_TOKEN);
 
@@ -32,7 +31,9 @@ async function startWhatsApp(chatId = null) {
         const { connection, lastDisconnect } = update;
         if (connection === 'open') {
             isConnected = true;
-            if (chatId) bot.api.sendMessage(chatId, '✅ <b>হোয়াটসঅ্যাপ সফলভাবে লিংক হয়েছে!</b>', { parse_mode: 'HTML' });
+            if (chatId) {
+                bot.api.sendMessage(chatId, '✅ <b>হোয়াটসঅ্যাপ সফলভাবে এবং স্থায়ীভাবে লিংক হয়েছে!</b>', { parse_mode: 'HTML' });
+            }
         } else if (connection === 'close') {
             isConnected = false;
             const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
@@ -59,9 +60,22 @@ bot.on('message:text', async (ctx) => {
 
     if (text.startsWith('/')) return;
 
+    // ১. লিংক করার অপشن
     if (text === '🔗 Link WhatsApp') {
+        if (isConnected) {
+            return ctx.reply('✅ আপনার হোয়াটসঅ্যাপ অ্যাকাউন্ট ইতিমধ্যে সফলভাবে লিংক করা আছে!', { parse_mode: 'HTML' });
+        }
         userStates[userId] = 'waiting_for_phone';
         return ctx.reply('📱 আপনার হোয়াটসঅ্যাপ নম্বরটি কান্ট্রি কোডসহ পাঠান (যেমন: <code>88017XXXXXXXXX</code>):', { parse_mode: 'HTML' });
+    }
+
+    // ২. চেক নাম্বারস মেনু অপশন
+    if (text === '🎁 Check Numbers') {
+        if (!isConnected) {
+            return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
+        }
+        userStates[userId] = 'waiting_for_numbers';
+        return ctx.reply('📥 যে নম্বরগুলো চেক করতে চান সেগুলো এক বা একাধিক একসাথে পেস্ট করে সেন্ড করুন:', { parse_mode: 'HTML' });
     }
 
     if (userStates[userId] === 'waiting_for_phone') {
@@ -81,8 +95,18 @@ bot.on('message:text', async (ctx) => {
         return;
     }
 
+    // সরাসরি নম্বর ইনপুট বা চেক করার প্রসেস
     const numbers = [...new Set((text.match(/\+?\d{10,15}/g) || []).map(n => n.replace(/\D/g, '')))];
-    if (numbers.length === 0) return;
+    if (numbers.length === 0) {
+        if (userStates[userId] === 'waiting_for_numbers') {
+            return ctx.reply('⚠️ কোনো সঠিক নম্বর পাওয়া যায়নি। দয়া করে সঠিক ফরম্যাটে নম্বর দিন।');
+        }
+        return;
+    }
+
+    if (userStates[userId] === 'waiting_for_numbers') {
+        delete userStates[userId];
+    }
 
     if (!isConnected || !waSocket) {
         return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
