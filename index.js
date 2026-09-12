@@ -2,9 +2,13 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const fs = require('fs');
 
-const TOKEN = process.env.BOT_TOKEN || "YOUR_TELEGRAM_BOT_TOKEN";
-const bot = new TelegramBot(TOKEN, { polling: true });
+const TOKEN = process.env.BOT_TOKEN;
+if (!TOKEN) {
+    console.error("Error: BOT_TOKEN is missing in environment variables!");
+    process.exit(1);
+}
 
+const bot = new TelegramBot(TOKEN, { polling: true });
 const DB_FILE = 'database.json';
 
 function loadDatabase() {
@@ -20,7 +24,6 @@ function saveDatabase(data) {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// /start কমান্ড এবং মেনু কিবোর্ড সেটআপ
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     const welcomeText = `স্বাগতম! আপনার USA নম্বর এবং ওটিপি লিংক ম্যানেজ করার বট এটি।\n\n` +
@@ -42,7 +45,6 @@ bot.onText(/\/start/, (msg) => {
     bot.sendMessage(chatId, welcomeText, { parse_mode: 'Markdown', ...replyKeyboard });
 });
 
-// /addmany অথবা সরাসরি টেক্সট থেকে নম্বর সেভ করা
 bot.onText(/\/addmany([\s\S]*)/, (msg, match) => {
     const chatId = msg.chat.id.toString();
     const rawText = match[1];
@@ -84,14 +86,12 @@ bot.onText(/\/addmany([\s\S]*)/, (msg, match) => {
     }
 });
 
-// মেইন কিবোর্ডের বাটন বা কমান্ড হ্যান্ডেলিং
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id.toString();
     const text = msg.text;
 
     if (!text) return;
 
-    // মেনু বাটন: সব নম্বর লিস্ট ও ওটিপি চেক করার অপশন দেখানো
     if (text === "📋 সব নম্বর (OTP Check)" || text === "/numbers") {
         const db = loadDatabase();
 
@@ -115,7 +115,6 @@ bot.on('message', async (msg) => {
         });
     }
 
-    // মেনু বাটন: সব নম্বর ডিলিট করা
     if (text === "❌ সব নম্বর মুছুন") {
         let db = loadDatabase();
         if (db[chatId]) {
@@ -128,7 +127,6 @@ bot.on('message', async (msg) => {
     }
 });
 
-// ইনলাইন বাটনে ক্লিক করলে লাইভ ওটিপি চেক করা (যেমনটা আপনি চাচ্ছিলেন)
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id.toString();
     const data = query.data;
@@ -148,11 +146,9 @@ bot.on('callback_query', async (query) => {
         bot.answerCallbackQuery(query.id, { text: `Checking ${item.number}...` });
 
         try {
-            // আপনার দেওয়া লিংকে রিকোয়েস্ট পাঠিয়ে ওটিপি চেক করা হচ্ছে
             const response = await axios.get(item.api_url, { timeout: 10000 });
             const code = typeof response.data === 'string' ? response.data.trim() : JSON.stringify(response.data).trim();
 
-            // ৩ থেকে ১০ ডিজিটের ওটিপি কোড ম্যাচ করলে দেখাবে
             if (/^\d{3,10}$/.test(code)) {
                 bot.sendMessage(chatId, `🎉 **OTP Received!**\nনম্বর: \`${item.number}\`\nকোড: \`${code}\``, { parse_mode: 'Markdown' });
             } else {
