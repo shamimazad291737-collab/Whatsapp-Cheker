@@ -18,11 +18,11 @@ let waSocket = null;
 let isConnected = false;
 let userStates = {};
 
-// সঠিক গ্রামি কিবোর্ড ক্লাস দিয়ে লেআউট তৈরি
+// নিচের রিপ্লাই কিবোর্ডে "Link WhatsApp" সহ লেআউট সাজানো
 const replyMenu = new Keyboard()
-    .text("🎁 Check Numbers").text("🎂 My Profile").row()
-    .text("📊 Status Info").text("⚙️ Settings").row()
-    .text("🆘 Support")
+    .text("🎁 Check Numbers").text("🔗 Link WhatsApp").row()
+    .text("🎂 My Profile").text("📊 Status Info").row()
+    .text("⚙️ Settings").text("🆘 Support")
     .resized();
 
 // পেয়ারিং কোড দিয়ে হোয়াটসঅ্যাপ কানেক্ট করার ফাংশন
@@ -72,9 +72,9 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
     }
 }
 
-// /start কমান্ড এবং নিচের রিপ্লাই কিবোর্ড পাঠানো
+// /start কমান্ড এবং রিপ্লাই কিবোর্ড পাঠানো
 bot.command("start", async (ctx) => {
-    const welcomeMsg = `⚡ <b>REX WS CHECKER BOT</b> ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n\nনম্বর লিংক করতে লিখুন: <code>/link আপনারনম্বর</code>\nউদাহরণ: <code>/link 88017XXXXXXXX</code>`;
+    const welcomeMsg = `⚡ <b>REX WS CHECKER BOT</b> ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n\nনম্বর চেক করতে নিচের মেনু থেকে অপশন বেছে নিন।`;
     await ctx.reply(welcomeMsg, { parse_mode: "HTML", reply_markup: replyMenu });
 });
 
@@ -91,6 +91,11 @@ bot.on("message:text", async (ctx) => {
         await ctx.reply("📥 চেকের জন্য নম্বরগুলোর লিস্ট বা মেসেজ পাঠান।", { parse_mode: "HTML" });
         return;
     }
+    if (text === "🔗 Link WhatsApp") {
+        userStates[userId] = "waiting_for_phone";
+        await ctx.reply("📱 আপনার হোয়াটসঅ্যাপ নম্বরটি কান্ট্রি কোডসহ পাঠান (যেমন: <code>88017XXXXXXXXX</code>):", { parse_mode: "HTML" });
+        return;
+    }
     if (text === "🎂 My Profile") {
         const linkStatus = isConnected ? "✅ Connected" : "❌ Not Connected";
         await ctx.reply(`👤 <b>ইউজার প্রোফাইল:</b>\n\nহোয়াটসঅ্যাপ স্ট্যাটাস: ${linkStatus}`, { parse_mode: "HTML" });
@@ -102,7 +107,7 @@ bot.on("message:text", async (ctx) => {
         return;
     }
     if (text === "⚙️ Settings") {
-        await ctx.reply("⚙️ <b>সেটিংস:</b>\n\nনম্বর লিংক করতে ব্যবহার করুন: <code>/link আপনারনম্বর</code>", { parse_mode: "HTML" });
+        await ctx.reply("⚙️ <b>সেটিংস:</b>\n\nনম্বর লিংক করতে নিচের <b>🔗 Link WhatsApp</b> বাটন ব্যবহার করুন।", { parse_mode: "HTML" });
         return;
     }
     if (text === "🆘 Support") {
@@ -128,7 +133,7 @@ bot.on("message:text", async (ctx) => {
     if (numbers.length === 0) return;
 
     if (!isConnected || !waSocket) {
-        await ctx.reply("❌ প্রথমে আপনার হোয়াটসঅ্যাপ অ্যাকাউন্ট লিংক করুন! ব্যবহার করুন: <code>/link নম্বর</code>", { parse_mode: "HTML" });
+        await ctx.reply("❌ প্রথমে আপনার হোয়াটসঅ্যাপ অ্যাকাউন্ট লিংক করুন! নিচের <b>🔗 Link WhatsApp</b> বাটনে ক্লিক করুন।", { parse_mode: "HTML" });
         return;
     }
 
