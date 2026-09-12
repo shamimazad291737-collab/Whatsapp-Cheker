@@ -1,0 +1,13 @@
+{
+  "name": "rex-ws-checker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.5",
+    "grammy": "^1.21.1",
+    "pino": "^8.19.0"
+  }
+}
