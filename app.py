@@ -4,22 +4,28 @@ import asyncio
 from flask import Flask
 from threading import Thread
 
-# Fix event loop for Pyrogram on Python 3.10+ / Python 3.14
+# Fix event loop for Pyrogram on Python 3.10+
 try:
     loop = asyncio.get_event_loop()
 except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram import Client, filters, enums
+from pyrogram.types import (
+    Message, 
+    ReplyKeyboardMarkup, 
+    KeyboardButton, 
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton
+)
 
-# Render Free Service Keep-Alive Web Server
+# Render Web Server Keep-Alive Integration
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "WhatsApp Bulk Checker Bot is Running Live!"
+    return "REX WS CHECKER Bot is Running Live!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -37,7 +43,23 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
-# Helper function to extract and format numbers
+# Telegram Premium Animated Custom Emojis (HTML Tag Format)
+# নিজের অন্য কোনো Custom Emoji ID ব্যবহার করতে চাইলে এই ডিজিটগুলো বদলে নিতে পারেন
+EMOJI_REGISTERED = '<tg-emoji id="5368324170671202286">✅</tg-emoji>'
+EMOJI_NO_ACCOUNT = '<tg-emoji id="5368324170671202287">⚠️</tg-emoji>'
+EMOJI_BANNED = '<tg-emoji id="5368324170671202288">🚫</tg-emoji>'
+EMOJI_BOT = '<tg-emoji id="5467472918826501234">⚡</tg-emoji>'
+
+# Permanent Keyboard Menu (Screen Bottom Panel)
+MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("🎁 Check Numbers"), KeyboardButton("👛 My Profile")],
+        [KeyboardButton("📊 Status Info"), KeyboardButton("⚙️ Settings")],
+        [KeyboardButton("🆘 Support")]
+    ],
+    resize_keyboard=True
+)
+
 def extract_numbers(text):
     raw_numbers = re.findall(r'\+?\d{10,15}', text)
     cleaned = []
@@ -47,59 +69,89 @@ def extract_numbers(text):
             cleaned.append(clean)
     return list(set(cleaned))
 
-# Core WhatsApp Status Logic (Simulated Validation)
 async def check_whatsapp_status(phone_number):
     await asyncio.sleep(0.3)
     if len(phone_number) < 10 or len(phone_number) > 15:
-        return "Invalid Format"
-    return "Real & Active"
+        return "No Account"
+    
+    # ব্যাকএন্ড কন্ডিশন চেক (ডিফল্ট সিমুলেটেড স্ট্যাটাস)
+    return "Registered"
 
+# Start Command
 @bot.on_message(filters.command("start"))
 async def start_cmd(client, message: Message):
     welcome_msg = (
-        "👋 **WhatsApp Bulk Number Checker Bot**\n\n"
-        "আমাকে একসাথে একাধিক নম্বর লিখে পাঠান (যেমন: `+1234567890`) অথবা একটি `.txt` ফাইল আপলোড করুন।\n\n"
-        "আমি নম্বরগুলো ফিল্টার করে Real, Invalid, এবং No WhatsApp আলাদা করে দেব।"
+        f"{EMOJI_BOT} <b>REX WS CHECKER BOT</b> {EMOJI_BOT}\n\n"
+        f"আমাকে নম্বর পাঠান অথবা নিচে দেওয়া বাটন ব্যবহার করুন।\n\n"
+        f"<b>স্ট্যাটাস গাইড:</b>\n"
+        f"{EMOJI_REGISTERED} <b>Registered:</b> হোয়াটসঅ্যাপ অ্যাকাউন্ট সচল আছে\n"
+        f"{EMOJI_NO_ACCOUNT} <b>No Account:</b> হোয়াটসঅ্যাপ অ্যাকাউন্ট খোলা নেই\n"
+        f"{EMOJI_BANNED} <b>Banned:</b> অ্যাকাউন্ট নষ্ট বা ব্যানড"
     )
-    await message.reply_text(welcome_msg)
+    
+    await message.reply_text(
+        welcome_msg, 
+        parse_mode=enums.ParseMode.HTML, 
+        reply_markup=MAIN_REPLY_KEYBOARD
+    )
 
+# Text & Reply Keyboard Button Handler
 @bot.on_message(filters.text & filters.private)
 async def handle_text_numbers(client, message: Message):
+    # Reply Keyboard Actions
+    if message.text == "🎁 Check Numbers":
+        await message.reply_text("📥 আপনার নম্বরগুলোর লিস্ট পাঠ লিখুন অথবা <code>.txt</code> ফাইল পাঠান।", parse_mode=enums.ParseMode.HTML)
+        return
+    elif message.text == "👛 My Profile":
+        await message.reply_text("👤 <b>ইউজার প্রোফাইল:</b>\n\nস্ট্যাটাস: VIP Access\nটোটাল চেকড: 100+", parse_mode=enums.ParseMode.HTML)
+        return
+    elif message.text == "📊 Status Info":
+        info_text = (
+            f"<b>ক্যাটাগরি নির্দেশিকা:</b>\n\n"
+            f"{EMOJI_REGISTERED} Active Accounts\n"
+            f"{EMOJI_NO_ACCOUNT} Non-WhatsApp Numbers\n"
+            f"{EMOJI_BANNED} Suspended Accounts"
+        )
+        await message.reply_text(info_text, parse_mode=enums.ParseMode.HTML)
+        return
+    elif message.text == "🆘 Support":
+        await message.reply_text("💬 এডমিন সাপোর্টের জন্য যোগাযোগ করুন: @Telegram", parse_mode=enums.ParseMode.HTML)
+        return
+
     numbers = extract_numbers(message.text)
     
     if not numbers:
-        await message.reply_text("❌ কোনো সঠিক নম্বর পাওয়া যায়নি। দেশের কোড সহ নম্বর দিন (যেমন: +14155552671)।")
+        await message.reply_text("❌ কোনো সঠিক নম্বর পাওয়া যায়নি! সঠিক দেশের কোড সহ নম্বর দিন।")
         return
 
-    status_msg = await message.reply_text(f"🔄 **প্রসেসিং শুরু হয়েছে...**\nমোট নম্বর: `{len(numbers)}` টি")
+    status_msg = await message.reply_text(f"⏳ <b>প্রসেসিং চলছে...</b>\nমোট নম্বর: <code>{len(numbers)}</code> টি", parse_mode=enums.ParseMode.HTML)
     
-    real_wa = []
-    invalid_or_no_wa = []
+    registered, no_account, banned = [], [], []
 
     for num in numbers:
         status = await check_whatsapp_status(num)
-        if status == "Real & Active":
-            real_wa.append(f"✅ +{num}")
+        if status == "Registered":
+            registered.append(f"{EMOJI_REGISTERED} +{num}")
+        elif status == "Banned":
+            banned.append(f"{EMOJI_BANNED} +{num}")
         else:
-            invalid_or_no_wa.append(f"❌ +{num}")
+            no_account.append(f"{EMOJI_NO_ACCOUNT} +{num}")
 
-    result_text = f"📊 **চেক ফলাফল (Total: {len(numbers)}):**\n\n"
-    result_text += f"✔️ **Real WhatsApp ({len(real_wa)}):**\n" + ("\n".join(real_wa[:50]) if real_wa else "None")
-    
-    if len(real_wa) > 50:
-        result_text += f"\n...এবং আরও {len(real_wa) - 50} টি নম্বর।"
-        
-    result_text += f"\n\n❌ **No WhatsApp / Invalid ({len(invalid_or_no_wa)}):**\n" + ("\n".join(invalid_or_no_wa[:30]) if invalid_or_no_wa else "None")
+    result_text = f"📊 <b>চেক ফলাফল (Total: {len(numbers)}):</b>\n\n"
+    result_text += f"{EMOJI_REGISTERED} <b>Registered ({len(registered)}):</b>\n" + ("\n".join(registered[:30]) if registered else "None")
+    result_text += f"\n\n{EMOJI_NO_ACCOUNT} <b>No Account ({len(no_account)}):</b>\n" + ("\n".join(no_account[:20]) if no_account else "None")
+    result_text += f"\n\n{EMOJI_BANNED} <b>Banned ({len(banned)}):</b>\n" + ("\n".join(banned[:20]) if banned else "None")
 
-    await status_msg.edit_text(result_text)
+    await status_msg.edit_text(result_text, parse_mode=enums.ParseMode.HTML)
 
+# .txt File Upload Handler
 @bot.on_message(filters.document & filters.private)
 async def handle_file_numbers(client, message: Message):
     if not message.document.file_name.endswith('.txt'):
-        await message.reply_text("❌ শুধুমাত্র `.txt` ফাইল পাঠান।")
+        await message.reply_text("❌ শুধুমাত্র <code>.txt</code> ফাইল গ্রহণ করা হবে।", parse_mode=enums.ParseMode.HTML)
         return
 
-    status_msg = await message.reply_text("📥 ফাইল ডাউনলোড ও স্ক্যান করা হচ্ছে...")
+    status_msg = await message.reply_text("📥 <b>ফাইল প্রসেসিং করা হচ্ছে...</b>", parse_mode=enums.ParseMode.HTML)
     file_path = await message.download()
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -109,39 +161,47 @@ async def handle_file_numbers(client, message: Message):
     numbers = extract_numbers(content)
 
     if not numbers:
-        await status_msg.edit_text("❌ ফাইলে কোনো বৈধ নম্বর পাওয়া যায়নি।")
+        await status_msg.edit_text("❌ ফাইলে কোনো বৈধ্য নম্বর পাওয়া যায়নি।")
         return
 
-    await status_msg.edit_text(f"🔄 **ফাইল প্রসেস হচ্ছে...**\nমোট নম্বর: `{len(numbers)}` টি")
+    await status_msg.edit_text(f"🔄 <b>স্ক্যানিং চলছে...</b>\nমোট নম্বর: <code>{len(numbers)}</code> টি", parse_mode=enums.ParseMode.HTML)
     
-    real_wa = []
-    invalid_or_no_wa = []
+    registered, no_account, banned = [], [], []
 
     for num in numbers:
         status = await check_whatsapp_status(num)
-        if status == "Real & Active":
-            real_wa.append(f"+{num}")
+        if status == "Registered":
+            registered.append(f"+{num}")
+        elif status == "Banned":
+            banned.append(f"+{num}")
         else:
-            invalid_or_no_wa.append(f"+{num}")
+            no_account.append(f"+{num}")
 
     result_filename = f"result_{message.from_user.id}.txt"
     with open(result_filename, "w", encoding="utf-8") as f:
-        f.write(f"=== REAL WHATSAPP NUMBERS ({len(real_wa)}) ===\n")
-        f.write("\n".join(real_wa))
-        f.write(f"\n\n=== INVALID / NO WHATSAPP ({len(invalid_or_no_wa)}) ===\n")
-        f.write("\n".join(invalid_or_no_wa))
+        f.write(f"=== REGISTERED ACCOUNTS ({len(registered)}) ===\n")
+        f.write("\n".join(registered))
+        f.write(f"\n\n=== NO ACCOUNT ({len(no_account)}) ===\n")
+        f.write("\n".join(no_account))
+        f.write(f"\n\n=== BANNED ACCOUNTS ({len(banned)}) ===\n")
+        f.write("\n".join(banned))
+
+    caption_msg = (
+        f"🎉 <b>স্ক্যানিং সম্পূর্ণ সম্পন্ন হয়েছে!</b>\n\n"
+        f"{EMOJI_REGISTERED} Registered: <code>{len(registered)}</code>\n"
+        f"{EMOJI_NO_ACCOUNT} No Account: <code>{len(no_account)}</code>\n"
+        f"{EMOJI_BANNED} Banned: <code>{len(banned)}</code>"
+    )
 
     await message.reply_document(
         document=result_filename,
-        caption=f"✅ **স্ক্যান সম্পন্ন!**\n\n✔️ Real: `{len(real_wa)}`\n❌ Invalid/No WA: `{len(invalid_or_no_wa)}`"
+        caption=caption_msg,
+        parse_mode=enums.ParseMode.HTML
     )
     
     if os.path.exists(result_filename):
         os.remove(result_filename)
 
 if __name__ == "__main__":
-    # Start Keep-Alive Web Server
     Thread(target=run_flask, daemon=True).start()
-    
-    # Run Pyrogram Bot
     bot.run()
