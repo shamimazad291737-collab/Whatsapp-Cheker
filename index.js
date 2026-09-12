@@ -19,14 +19,12 @@ let waSocket = null;
 let isConnected = false;
 let userStates = {};
 
-// নিচের রিপ্লাই কিবোর্ড লেআউট
 const replyMenu = new Keyboard()
     .text("🎁 Check Numbers").text("🔗 Link WhatsApp").row()
     .text("🎂 My Profile").text("📊 Status Info").row()
     .text("⚙️ Settings").text("🆘 Support")
     .resized();
 
-// পেয়ারিং কোড দিয়ে হোয়াটসঅ্যাপ কানেক্ট করার ফাংশন
 async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
     const authFolder = "auth_info_baileys";
     if (fs.existsSync(authFolder)) {
@@ -40,7 +38,8 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
         version,
         auth: state,
         printQRInTerminal: false,
-        browser: Browsers.macOS("Desktop"), // ক্লাউড বাইপাস করার জন্য সঠিক ব্রাউজার ফিক্স
+        // হোয়াটসঅ্যাপ সার্ভার যাতে রিজেক্ট না করে, তাই স্ট্যান্ডার্ড ক্রোম অন ম্যাকবুক ব্রাউজার দেওয়া হলো
+        browser: Browsers.macOS("Chrome"), 
         syncFullHistory: false,
         logger: pino({ level: "silent" })
     });
@@ -66,7 +65,7 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
         }
     });
 
-    // সঠিক সময়ে পেয়ারিং কোডের জন্য রিকোয়েস্ট পাঠানো
+    // সঠিক সময়ে ডেটা সিঙ্ক হওয়ার পর পেয়ারিং কোডের জন্য রিকোয়েস্ট পাঠানো
     setTimeout(async () => {
         try {
             if (!waSocket.authState.creds.registered) {
@@ -87,16 +86,14 @@ async function connectWhatsAppWithPairingCode(phoneNumber, ctx, chatId) {
             console.log("Pairing Error:", e);
             await bot.api.sendMessage(chatId, "❌ পেয়ারিং কোড আনতে সমস্যা হয়েছে। সার্ভার থেকে রিকোয়েস্ট ব্লক করা হতে পারে, কিছুক্ষণ পর আবার চেষ্টা করুন।");
         }
-    }, 6000);
+    }, 8000); // সময় বাড়িয়ে ৮ সেকেন্ড করা হলো যাতে কোনো ল্যাগ না থাকে
 }
 
-// /start কমান্ড এবং রিপ্লাই কিবোর্ড পাঠানো
 bot.command("start", async (ctx) => {
     const welcomeMsg = `⚡ <b>REX WS CHECKER BOT</b> ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n\nনম্বর চেক করতে নিচের মেনু থেকে অপশন বেছে নিন।`;
     await ctx.reply(welcomeMsg, { parse_mode: "HTML", reply_markup: replyMenu });
 });
 
-// টেক্সট মেসেজ ও মেনু বাটন হ্যান্ডলার
 bot.on("message:text", async (ctx) => {
     const text = ctx.message.text;
     const userId = ctx.from.id;
@@ -170,7 +167,7 @@ bot.on("message:text", async (ctx) => {
                 no_account.push(`⚠️ <code>+${num}</code>`);
             }
         } catch (e) {
-            no_account.push(`⚠️ <code>+${num}</code>`);
+            no_account.api ? null : no_account.push(`⚠️ <code>+${num}</code>`);
         }
     }
 
