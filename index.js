@@ -1,5 +1,5 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
-const { Bot, ReplyKeyboard } = require("grammy");
+const { Bot, Keyboard } = require("grammy");
 const pino = require("pino");
 const http = require("http");
 
@@ -18,8 +18,8 @@ let waSocket = null;
 let isConnected = false;
 let userStates = {};
 
-// আপনার ছবির সাথে হুবহু মিল রেখে নিচের স্থায়ী রিপ্লাই কিবোর্ড ডিজাইন
-const replyMenu = new ReplyKeyboard()
+// সঠিক গ্রামি কিবোর্ড ক্লাস দিয়ে লেআউট তৈরি
+const replyMenu = new Keyboard()
     .text("🎁 Check Numbers").text("🎂 My Profile").row()
     .text("📊 Status Info").text("⚙️ Settings").row()
     .text("🆘 Support")
@@ -173,4 +173,3 @@ bot.command("link", async (ctx) => {
 });
 
 bot.start();
-        
