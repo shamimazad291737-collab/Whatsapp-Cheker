@@ -6,7 +6,7 @@ from threading import Thread
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# Render Free Service keep-alive HTTP Server
+# Render Free Service Keep-Alive Web Server
 app = Flask(__name__)
 
 @app.route('/')
@@ -14,6 +14,7 @@ def home():
     return "WhatsApp Bulk Checker Bot is Running Live!"
 
 def run_flask():
+    # Render dynamic port configuration
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
@@ -23,7 +24,7 @@ API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not all([API_ID, API_HASH, BOT_TOKEN]):
-    print("Error: Required Environment Variables (API_ID, API_HASH, BOT_TOKEN) are missing!")
+    print("⚠️ Warning: Required Environment Variables (API_ID, API_HASH, BOT_TOKEN) are missing!")
 
 bot = Client(
     "wa_checker_bot",
@@ -43,17 +44,14 @@ def extract_numbers(text):
             cleaned.append(clean)
     return list(set(cleaned))  # Unique numbers only
 
-# Simulated Core WhatsApp Status Logic 
-# (In production, connect via API or local Node Baileys HTTP Microservice)
+# Core WhatsApp Status Logic (Simulated Validation)
 async def check_whatsapp_status(phone_number):
-    await asyncio.sleep(0.3)  # Anti-spam delay
+    await asyncio.sleep(0.3)  # Anti-spam rate limit delay
     
-    # Basic structural & format rules
+    # Basic structural rules
     if len(phone_number) < 10 or len(phone_number) > 15:
         return "Invalid Format"
     
-    # Example carrier/VOIP risk checking logic integration point
-    # Returns status based on number profile
     return "Real & Active"
 
 @bot.on_message(filters.command("start"))
@@ -127,7 +125,7 @@ async def handle_file_numbers(client, message: Message):
             invalid_or_no_wa.append(f"+{num}")
 
     # Create Result File
-    result_filename = "result.txt"
+    result_filename = f"result_{message.from_user.id}.txt"
     with open(result_filename, "w", encoding="utf-8") as f:
         f.write(f"=== REAL WHATSAPP NUMBERS ({len(real_wa)}) ===\n")
         f.write("\n".join(real_wa))
@@ -143,7 +141,8 @@ async def handle_file_numbers(client, message: Message):
         os.remove(result_filename)
 
 if __name__ == "__main__":
-    # Start Keep-Alive Web Server for Render
+    # Start Web Server in Background Thread
     Thread(target=run_flask, daemon=True).start()
-    # Start Telegram Bot
+    # Start Pyrogram Bot
     bot.run()
+              
