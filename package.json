@@ -1,13 +1,13 @@
 {
-  "name": "rex-ws-checker",
+  "name": "telegram-otp-bot",
   "version": "1.0.0",
+  "description": "Telegram OTP Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.5",
-    "grammy": "^1.21.1",
-    "pino": "^8.19.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.7.9"
   }
 }
