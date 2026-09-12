@@ -14,7 +14,6 @@ def home():
     return "WhatsApp Bulk Checker Bot is Running Live!"
 
 def run_flask():
-    # Render dynamic port configuration
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
@@ -35,23 +34,19 @@ bot = Client(
 
 # Helper function to extract and format numbers
 def extract_numbers(text):
-    # Extracts international format numbers
     raw_numbers = re.findall(r'\+?\d{10,15}', text)
     cleaned = []
     for num in raw_numbers:
         clean = re.sub(r'\D', '', num)
         if len(clean) >= 10:
             cleaned.append(clean)
-    return list(set(cleaned))  # Unique numbers only
+    return list(set(cleaned))
 
 # Core WhatsApp Status Logic (Simulated Validation)
 async def check_whatsapp_status(phone_number):
-    await asyncio.sleep(0.3)  # Anti-spam rate limit delay
-    
-    # Basic structural rules
+    await asyncio.sleep(0.3)
     if len(phone_number) < 10 or len(phone_number) > 15:
         return "Invalid Format"
-    
     return "Real & Active"
 
 @bot.on_message(filters.command("start"))
@@ -124,7 +119,6 @@ async def handle_file_numbers(client, message: Message):
         else:
             invalid_or_no_wa.append(f"+{num}")
 
-    # Create Result File
     result_filename = f"result_{message.from_user.id}.txt"
     with open(result_filename, "w", encoding="utf-8") as f:
         f.write(f"=== REAL WHATSAPP NUMBERS ({len(real_wa)}) ===\n")
@@ -140,8 +134,16 @@ async def handle_file_numbers(client, message: Message):
     if os.path.exists(result_filename):
         os.remove(result_filename)
 
-if __name__ == "__main__":
-    # Start Web Server in Background Thread
+async def main():
+    # Start Keep-Alive Flask Server
     Thread(target=run_flask, daemon=True).start()
-    # Start Pyrogram Bot
-    bot.run()
+    # Start Bot Async Loop
+    await bot.start()
+    print("Bot is successfully running!")
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main())
+    
