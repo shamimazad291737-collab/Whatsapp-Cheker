@@ -60,7 +60,6 @@ bot.on('message:text', async (ctx) => {
 
     if (text.startsWith('/')) return;
 
-    // ১. লিংক করার অপشن
     if (text === '🔗 Link WhatsApp') {
         if (isConnected) {
             return ctx.reply('✅ আপনার হোয়াটসঅ্যাপ অ্যাকাউন্ট ইতিমধ্যে সফলভাবে লিংক করা আছে!', { parse_mode: 'HTML' });
@@ -69,13 +68,12 @@ bot.on('message:text', async (ctx) => {
         return ctx.reply('📱 আপনার হোয়াটসঅ্যাপ নম্বরটি কান্ট্রি কোডসহ পাঠান (যেমন: <code>88017XXXXXXXXX</code>):', { parse_mode: 'HTML' });
     }
 
-    // ২. চেক নাম্বারস মেনু অপশন
     if (text === '🎁 Check Numbers') {
         if (!isConnected) {
             return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
         }
         userStates[userId] = 'waiting_for_numbers';
-        return ctx.reply('📥 যে নম্বরগুলো চেক করতে চান সেগুলো এক বা একাধিক একসাথে পেস্ট করে সেন্ড করুন:', { parse_mode: 'HTML' });
+        return ctx.reply('📥 যে নম্বরগুলো চেক করতে চান সেগুলো সেন্ড করুন <b>(সর্বোচ্চ ১০টি নম্বর একবারে দেওয়া যাবে)</b>:', { parse_mode: 'HTML' });
     }
 
     if (userStates[userId] === 'waiting_for_phone') {
@@ -95,13 +93,18 @@ bot.on('message:text', async (ctx) => {
         return;
     }
 
-    // সরাসরি নম্বর ইনপুট বা চেক করার প্রসেস
     const numbers = [...new Set((text.match(/\+?\d{10,15}/g) || []).map(n => n.replace(/\D/g, '')))];
+    
     if (numbers.length === 0) {
         if (userStates[userId] === 'waiting_for_numbers') {
             return ctx.reply('⚠️ কোনো সঠিক নম্বর পাওয়া যায়নি। দয়া করে সঠিক ফরম্যাটে নম্বর দিন।');
         }
         return;
+    }
+
+    // সর্বোচ্চ ১০টি নম্বর চেকের সিকিউরিটি লিমি트
+    if (numbers.length > 10) {
+        return ctx.reply(`⚠️ <b>সীমাবদ্ধতা লঙ্ঘন!</b> আপনি একসাথে ${numbers.length}টি নম্বর দিয়েছেন। বট সুরক্ষিত রাখতে একবারে সর্বোচ্চ <b>১০টি</b> নম্বর চেক করা যাবে। দয়া করে ১০ বা তার কম নম্বর দিন।`, { parse_mode: 'HTML' });
     }
 
     if (userStates[userId] === 'waiting_for_numbers') {
@@ -112,26 +115,29 @@ bot.on('message:text', async (ctx) => {
         return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
     }
 
-    const statusMsg = await ctx.reply(`⏳ চেক করা হচ্ছে... মোট নম্বর: ${numbers.length}`);
+    const statusMsg = await ctx.reply(`⏳ নিখুঁতভাবে চেক করা হচ্ছে... মোট নম্বর: ${numbers.length}`);
     let registered = [], no_account = [];
 
+    // অত্যন্ত নিখুঁতভাবে সিঙ্গেল বা ব্যাচ ধরে কুয়েরি করার লজিক
     for (let num of numbers) {
         try {
-            const [res] = await waSocket.onWhatsApp(num + '@s.whatsapp.net');
-            if (res && res.exists) {
+            const results = await waSocket.onWhatsApp(num + '@s.whatsapp.net');
+            if (results && results.length > 0 && results[0].exists) {
                 registered.push(`✅ <code>+${num}</code>`);
             } else {
                 no_account.push(`⚠️ <code>+${num}</code>`);
             }
-        } catch {
+        } catch (e) {
             no_account.push(`⚠️ <code>+${num}</code>`);
         }
+        // প্রতিটি কুয়েরির মাঝে সামান্য বিরতি দিয়ে রেলওয়ে ও হোয়াটসঅ্যাপ সার্ভারের রেসপন্স স্ট্যাবল রাখা হয়েছে
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    let resText = `📊 <b>ফলাফল:</b>\n\n✅ Registered (${registered.length}):\n` + 
-        (registered.slice(0, 20).join('\n') || 'None') + 
+    let resText = `📊 <b>নিখুঁত ফলাফল:</b>\n\n✅ Registered (${registered.length}):\n` + 
+        (registered.join('\n') || 'None') + 
         `\n\n⚠️ No Account (${no_account.length}):\n` + 
-        (no_account.slice(0, 20).join('\n') || 'None');
+        (no_account.join('\n') || 'None');
 
     await bot.api.editMessageText(chatId, statusMsg.message_id, resText, { parse_mode: 'HTML' });
 });
