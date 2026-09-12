@@ -5,6 +5,9 @@ const fs = require('fs');
 const BOT_TOKEN = process.env.BOT_TOKEN || '8828385782:AAG1W02m2glBA4jI3jVFyBMk1-6Ly296HBk';
 const bot = new Bot(BOT_TOKEN);
 
+// আপনার টেলিগ্রাম ইউজার আইডি এখানে বসিয়ে দিন (অ্যাডমিন আইডি)
+const ADMIN_ID = 7388500439; // এখানে আপনার আসল Telegram User ID বসাবেন
+
 let waSocket = null;
 let isConnected = false;
 let userStates = {};
@@ -73,7 +76,8 @@ bot.on('message:text', async (ctx) => {
             return ctx.reply('❌ প্রথমে <b>🔗 Link WhatsApp</b> এ ক্লিক করে অ্যাকাউন্ট লিংক করুন।', { parse_mode: 'HTML' });
         }
         userStates[userId] = 'waiting_for_numbers';
-        return ctx.reply('📥 যে নম্বরগুলো চেক করতে চান সেগুলো সেন্ড করুন <b>(সর্বোচ্চ ১০টি নম্বর একবারে দেওয়া যাবে)</b>:', { parse_mode: 'HTML' });
+        const limitText = (userId === ADMIN_ID) ? '<b>(আপনি অ্যাডমিন, তাই আনলিমিটেড নম্বর চেক করতে পারবেন)</b>' : '<b>(সর্বোচ্চ ১০টি নম্বর একবারে দেওয়া যাবে)</b>';
+        return ctx.reply(`📥 যে নম্বরগুলো চেক করতে চান সেগুলো সেন্ড করুন ${limitText}:`, { parse_mode: 'HTML' });
     }
 
     if (userStates[userId] === 'waiting_for_phone') {
@@ -102,9 +106,9 @@ bot.on('message:text', async (ctx) => {
         return;
     }
 
-    // সর্বোচ্চ ১০টি নম্বর চেকের সিকিউরিটি লিমি트
-    if (numbers.length > 10) {
-        return ctx.reply(`⚠️ <b>সীমাবদ্ধতা লঙ্ঘন!</b> আপনি একসাথে ${numbers.length}টি নম্বর দিয়েছেন। বট সুরক্ষিত রাখতে একবারে সর্বোচ্চ <b>১০টি</b> নম্বর চেক করা যাবে। দয়া করে ১০ বা তার কম নম্বর দিন।`, { parse_mode: 'HTML' });
+    // সাধারণ ব্যবহারকারীদের জন্য ১০টি নম্বর লিমিট, কিন্তু অ্যাডমিনের জন্য আনলিমিটেড
+    if (userId !== ADMIN_ID && numbers.length > 10) {
+        return ctx.reply(`⚠️ <b>সীমাবদ্ধতা লঙ্ঘন!</b> সাধারণ ব্যবহারকারী হিসেবে আপনি একসাথে ${numbers.length}টি নম্বর দিয়েছেন। একবারে সর্বোচ্চ <b>১০টি</b> নম্বর চেক করা যাবে।`, { parse_mode: 'HTML' });
     }
 
     if (userStates[userId] === 'waiting_for_numbers') {
@@ -118,7 +122,6 @@ bot.on('message:text', async (ctx) => {
     const statusMsg = await ctx.reply(`⏳ নিখুঁতভাবে চেক করা হচ্ছে... মোট নম্বর: ${numbers.length}`);
     let registered = [], no_account = [];
 
-    // অত্যন্ত নিখুঁতভাবে সিঙ্গেল বা ব্যাচ ধরে কুয়েরি করার লজিক
     for (let num of numbers) {
         try {
             const results = await waSocket.onWhatsApp(num + '@s.whatsapp.net');
@@ -130,7 +133,6 @@ bot.on('message:text', async (ctx) => {
         } catch (e) {
             no_account.push(`⚠️ <code>+${num}</code>`);
         }
-        // প্রতিটি কুয়েরির মাঝে সামান্য বিরতি দিয়ে রেলওয়ে ও হোয়াটসঅ্যাপ সার্ভারের রেসপন্স স্ট্যাবল রাখা হয়েছে
         await new Promise(resolve => setTimeout(resolve, 300));
     }
 
