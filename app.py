@@ -15,9 +15,7 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import (
     Message, 
     ReplyKeyboardMarkup, 
-    KeyboardButton, 
-    InlineKeyboardMarkup, 
-    InlineKeyboardButton
+    KeyboardButton
 )
 
 # Render Web Server Keep-Alive Integration
@@ -44,13 +42,13 @@ bot = Client(
 )
 
 # Telegram Premium Animated Custom Emojis (HTML Tag Format)
-# নিজের অন্য কোনো Custom Emoji ID ব্যবহার করতে চাইলে এই ডিজিটগুলো বদলে নিতে পারেন
+# বোট থেকে আসল ID পাওয়ার পর প্লেসহোল্ডার ID গুলো পরিবর্তন করে দিন
 EMOJI_REGISTERED = '<tg-emoji id="5368324170671202286">✅</tg-emoji>'
 EMOJI_NO_ACCOUNT = '<tg-emoji id="5368324170671202287">⚠️</tg-emoji>'
 EMOJI_BANNED = '<tg-emoji id="5368324170671202288">🚫</tg-emoji>'
 EMOJI_BOT = '<tg-emoji id="5467472918826501234">⚡</tg-emoji>'
 
-# Permanent Keyboard Menu (Screen Bottom Panel)
+# Screen Bottom Panel Buttons
 MAIN_REPLY_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🎁 Check Numbers"), KeyboardButton("👛 My Profile")],
@@ -73,8 +71,6 @@ async def check_whatsapp_status(phone_number):
     await asyncio.sleep(0.3)
     if len(phone_number) < 10 or len(phone_number) > 15:
         return "No Account"
-    
-    # ব্যাকএন্ড কন্ডিশন চেক (ডিফল্ট সিমুলেটেড স্ট্যাটাস)
     return "Registered"
 
 # Start Command
@@ -95,10 +91,23 @@ async def start_cmd(client, message: Message):
         reply_markup=MAIN_REPLY_KEYBOARD
     )
 
-# Text & Reply Keyboard Button Handler
+# Text & Main Handler
 @bot.on_message(filters.text & filters.private)
 async def handle_text_numbers(client, message: Message):
-    # Reply Keyboard Actions
+    #১. প্রিমিয়াম ইমোজি ডিটেক্টর (বটে Premium Emoji পাঠালে ID বলে দেবে)
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == enums.MessageEntityType.CUSTOM_EMOJI:
+                await message.reply_text(
+                    f"✨ <b>Custom Emoji ID Found!</b>\n\n"
+                    f"Emoji ID: <code>{entity.custom_emoji_id}</code>\n\n"
+                    f"কোডে ব্যবহার করুন:\n"
+                    f"<code>&lt;tg-emoji id=\"{entity.custom_emoji_id}\"&gt;✅&lt;/tg-emoji&gt;</code>",
+                    parse_mode=enums.ParseMode.HTML
+                )
+                return
+
+    # ২. বাটন হ্যান্ডলিং
     if message.text == "🎁 Check Numbers":
         await message.reply_text("📥 আপনার নম্বরগুলোর লিস্ট পাঠ লিখুন অথবা <code>.txt</code> ফাইল পাঠান।", parse_mode=enums.ParseMode.HTML)
         return
@@ -115,9 +124,10 @@ async def handle_text_numbers(client, message: Message):
         await message.reply_text(info_text, parse_mode=enums.ParseMode.HTML)
         return
     elif message.text == "🆘 Support":
-        await message.reply_text("💬 এডমিন সাপোর্টের জন্য যোগাযোগ করুন: @Telegram", parse_mode=enums.ParseMode.HTML)
+        await message.reply_text("💬 এডমিন সাপোর্টের জন্য যোগাযোগ করুন: @XSAIM_X9", parse_mode=enums.ParseMode.HTML)
         return
 
+    # ৩. নম্বর চেকিং লজিক
     numbers = extract_numbers(message.text)
     
     if not numbers:
@@ -144,7 +154,7 @@ async def handle_text_numbers(client, message: Message):
 
     await status_msg.edit_text(result_text, parse_mode=enums.ParseMode.HTML)
 
-# .txt File Upload Handler
+# .txt File Handler
 @bot.on_message(filters.document & filters.private)
 async def handle_file_numbers(client, message: Message):
     if not message.document.file_name.endswith('.txt'):
@@ -205,3 +215,4 @@ async def handle_file_numbers(client, message: Message):
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
     bot.run()
+    
