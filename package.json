@@ -1,13 +1,14 @@
 {
-  "name": "telegram-otp-bot",
+  "name": "whatsapp-cheker",
   "version": "1.0.0",
-  "description": "Telegram OTP Bot",
+  "description": "WhatsApp Number Checker Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0",
-    "axios": "^1.7.9"
+    "@whiskeysockets/baileys": "^6.7.13",
+    "grammy": "^1.21.1",
+    "pino": "^8.19.0"
   }
 }
