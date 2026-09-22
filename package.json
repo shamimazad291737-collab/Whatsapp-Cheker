@@ -1,0 +1,13 @@
+{
+  "name": "wa-checker-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
