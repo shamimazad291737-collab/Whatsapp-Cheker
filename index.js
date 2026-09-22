@@ -2,7 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, disconnectReason, Browsers
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const TELEGRAM_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
+const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
