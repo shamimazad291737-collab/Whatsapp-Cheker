@@ -1,18 +1,18 @@
 const { default: makeWASocket, useMultiFileAuthState, disconnectReason } = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
-const fs = require('fs');
 
-const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE';
-const ADMIN_ID = 7388500439;
+const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE'; // Telegram token
+const ADMIN_ID = 7388500439; // Apnar Telegram ID
 
+// Render port error bondho korar jonno
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot is Running!'));
-app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+app.get('/', (req, res) => res.send('Bot is Live!'));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-const userSockets = {}; 
+const userSockets = {};
 
 async function getUserSocket(chatId) {
     if (userSockets[chatId]) return userSockets[chatId];
@@ -29,7 +29,7 @@ async function getUserSocket(chatId) {
     waSock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'open') {
-            bot.sendMessage(chatId, "✅ Apnar WhatsApp successfully connect hoye geche! Ebar jekono number pathiye check korun.");
+            bot.sendMessage(chatId, "✅ WhatsApp successfully connected! Ebar jekono number check korte pathan.");
         } else if (connection === 'close') {
             delete userSockets[chatId];
             const shouldReconnect = (lastDisconnect.error?.output?.statusCode !== disconnectReason.loggedOut);
@@ -42,7 +42,7 @@ async function getUserSocket(chatId) {
 }
 
 bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, "👋 Swagotom!\n\nBot use korte apnar WhatsApp connect korun:\n👉 `/connect 8801XXXXXXXXX` (Apnar number din)\n\nCode pele WhatsApp > Linked Devices-e giye code-ti din.", { parse_mode: "Markdown" });
+    bot.sendMessage(msg.chat.id, "👋 Swagotom!\n\nBot use korte apnar WhatsApp connect korun:\n👉 `/connect 8801XXXXXXXXX` (Apnar WhatsApp number din)\n\nCode pele WhatsApp > Linked Devices-e giye code-ti din.", { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/connect (.+)/, async (msg, match) => {
@@ -53,7 +53,7 @@ bot.onText(/\/connect (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, "❌ Sothik number din. Example: `/connect 8801700000000`", { parse_mode: "Markdown" });
     }
 
-    bot.sendMessage(chatId, "⏳ Apnar WhatsApp-er jonno Pairing Code generate hocche...");
+    bot.sendMessage(chatId, "⏳ Pairing Code generate hocche...");
 
     try {
         const waSock = await getUserSocket(chatId);
@@ -65,7 +65,7 @@ bot.onText(/\/connect (.+)/, async (msg, match) => {
 
                 bot.sendMessage(chatId, `🔑 **Apnar Pairing Code:** \`${code}\`\n\n1. WhatsApp-e jan > Settings > Linked Devices\n2. **Link with phone number** select korun\n3. Ei code-ti bosan.`, { parse_mode: "Markdown" });
             } catch (err) {
-                bot.sendMessage(chatId, "❌ Pairing Code toiri korte parini. Number thik ache kina dekhe abar try korun.");
+                bot.sendMessage(chatId, "❌ Code generate hoyni. Number-ta thik ache kina dekhe abar try korun.");
             }
         }, 3000);
 
@@ -82,7 +82,7 @@ bot.on('message', async (msg) => {
 
     const waSock = userSockets[chatId];
     if (!waSock || !waSock.authState.creds.registered) {
-        return bot.sendMessage(chatId, "⚠️ Apnar WhatsApp connect kora nei!\n\nProthome `/connect 8801XXXXXXXXX` likhe apnar WhatsApp connect korun.", { parse_mode: "Markdown" });
+        return bot.sendMessage(chatId, "⚠️ Apnar WhatsApp connect kora nei!\n\nProthome `/connect 8801XXXXXXXXX` likhe WhatsApp connect korun.", { parse_mode: "Markdown" });
     }
 
     const checkPhone = text.replace('+', '').replace(/ /g, '').replace(/-/g, '');
