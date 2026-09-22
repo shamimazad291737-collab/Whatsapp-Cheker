@@ -1,6 +1,7 @@
 {
   "name": "wa-checker-bot",
   "version": "1.0.0",
+  "description": "WhatsApp Checker Telegram Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -8,5 +9,8 @@
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.5",
     "node-telegram-bot-api": "^0.66.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
