@@ -2,23 +2,37 @@ const { default: makeWASocket, useMultiFileAuthState, disconnectReason } = requi
 const TelegramBot = require('node-telegram-bot-api');
 
 // ১. কনফিগারেশন
-const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE'; // BotFather থেকে নেওয়া টোকেন
-const ADMIN_ID = 7388500439; // আপনার টেলিগ্রাম নিউমেরিক ID (না জানলে @userinfobot থেকে দেখে নিন)
+const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE'; // BotFather এর টোকেন
+const ADMIN_ID = 7388500439; // আপনার Numeric ID (@userinfobot থেকে নেওয়া)
+const MY_PHONE_NUMBER = '8801XXXXXXXXX'; // আপনার আসল WhatsApp নম্বর (কোড নেওয়ার জন্য)
 
-let currentPassword = "1234"; // ডিফল্ট পাসওয়ার্ড (পরে চেঞ্জ করতে পারবেন)
-const authenticatedUsers = new Set(); // যে ব্যবহারকারীরা সঠিক পাসওয়ার্ড দিয়েছে
+let currentPassword = "1234";
+const authenticatedUsers = new Set();
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 let waSock = null;
 
-// ২. WhatsApp কানেকশন
+// ২. WhatsApp কানেকশন + Pairing Code মেথড
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
     waSock = makeWASocket({
         auth: state,
-        printQRInTerminal: true
+        printQRInTerminal: false // QR code বন্ধ রাখা হলো
     });
+
+    // মোবাইল নম্বর দিয়ে Pairing Code জেনারেট করা
+    if (!waSock.authState.creds.registered) {
+        setTimeout(async () => {
+            try {
+                let code = await waSock.requestPairingCode(MY_PHONE_NUMBER);
+                code = code?.match(/.{1,4}/g)?.join("-") || code;
+                console.log(`\n=========================================\nYOUR WHATSAPP PAIRING CODE: ${code}\n=========================================\n`);
+            } catch (err) {
+                console.error("Pairing Code Error: ", err);
+            }
+        }, 3000);
+    }
 
     waSock.ev.on('creds.update', saveCreds);
 
@@ -26,10 +40,9 @@ async function connectToWhatsApp() {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error?.output?.statusCode !== disconnectReason.loggedOut);
-            console.log('Connection closed. Reconnecting...', shouldReconnect);
             if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
-            console.log('WhatsApp Connected Successfully!');
+            console.log('WhatsApp Connected Successfully via Pairing Code!');
         }
     });
 }
@@ -40,56 +53,53 @@ connectToWhatsApp();
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
 
-    // অ্যাডমিন হলে অটোমেটিক এক্সেস পাবে
     if (msg.from.id === ADMIN_ID) {
         authenticatedUsers.add(chatId);
-        return bot.sendMessage(chatId, "👑 স্বাগতম অ্যাডমিন! আপনি সরাসরি বট ব্যবহার করতে পারবেন।\n\nপাসওয়ার্ড পরিবর্তন করতে লিখুন:\n`/setpass নতুন_পাসওয়ার্ড`", { parse_mode: "Markdown" });
+        return bot.sendMessage(chatId, "👑 স্বাগতম অ্যাডমিন! বট ব্যবহারের জন্য প্রস্তুত।\n\nপাসওয়ার্ড বদলাতে লিখুন: `/setpass নতুন_পাসওয়ার্ড`", { parse_mode: "Markdown" });
     }
 
     if (authenticatedUsers.has(chatId)) {
-        bot.sendMessage(chatId, "✅ আপনি অলরেডি লগইন অবস্থায় আছেন। এবার চেক করার জন্য হোয়াটসঅ্যাপ নম্বর পাঠান।");
+        bot.sendMessage(chatId, "✅ আপনি অলরেডি লগইন আছেন। চেক করতে যেকোনো নম্বর পাঠান।");
     } else {
-        bot.sendMessage(chatId, "🔒 এই বটটি ব্যবহার করতে পাসওয়ার্ড প্রয়োজন।\n\nঅনুগ্রহ করে পাসওয়ার্ডটি এভাবে পাঠান:\n`/pass আপনার_পাসওয়ার্ড`", { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, "🔒 বটটি ব্যবহার করতে পাসওয়ার্ড লাগবে।\n\nলিখুন: `/pass পাসওয়ার্ড`", { parse_mode: "Markdown" });
     }
 });
 
-// ৪. পাসওয়ার্ড দিয়ে লগইন করা (/pass password)
+// ৪. পাসওয়ার্ড দিয়ে লগইন (/pass password)
 bot.onText(/\/pass (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     const inputPass = match[1].trim();
 
     if (inputPass === currentPassword) {
         authenticatedUsers.add(chatId);
-        bot.sendMessage(chatId, "🎉 সঠিক পাসওয়ার্ড! আপনার এক্সেস আনলক হয়েছে।\n\nএখন যেকোনো দেশের নম্বর পাঠান (যেমন: 8801700000000), আমি চেক করে দেব।");
+        bot.sendMessage(chatId, "🎉 সঠিক পাসওয়ার্ড! এবার নম্বর পাঠান (যেমন: 8801700000000)।");
     } else {
-        bot.sendMessage(chatId, "❌ ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিয়ে আবার চেষ্টা করুন।");
+        bot.sendMessage(chatId, "❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।");
     }
 });
 
-// ৫. অ্যাডমিন কর্তৃক পাসওয়ার্ড পরিবর্তন (/setpass new_password)
+// ৫. পাসওয়ার্ড পরিবর্তন (/setpass new_password)
 bot.onText(/\/setpass (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
 
-    // শুধু অ্যাডমিন পাসওয়ার্ড পরিবর্তন করতে পারবে
     if (msg.from.id !== ADMIN_ID) {
-        return bot.sendMessage(chatId, "⚠️ আপনি এই বটের অ্যাডমিন নন, তাই পাসওয়ার্ড পরিবর্তন করতে পারবেন না।");
+        return bot.sendMessage(chatId, "⚠️ শুধু অ্যাডমিন পাসওয়ার্ড পরিবর্তন করতে পারবে।");
     }
 
     const newPass = match[1].trim();
     currentPassword = newPass;
-    bot.sendMessage(chatId, `✅ সফলতা! নতুন পাসওয়ার্ড সেট করা হয়েছে: \`${newPass}\``, { parse_mode: "Markdown" });
+    bot.sendMessage(chatId, `✅ নতুন পাসওয়ার্ড: \`${newPass}\``, { parse_mode: "Markdown" });
 });
 
-// ৬. নম্বর চেকিং মেসেজ হ্যান্ডলার
+// ৬. নম্বর চেকিং মেসেজ
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
     if (!text || text.startsWith('/')) return;
 
-    // পাসওয়ার্ড চেক
     if (!authenticatedUsers.has(chatId) && msg.from.id !== ADMIN_ID) {
-        return bot.sendMessage(chatId, "🔒 এটি একটি প্রাইভেট বট। ব্যবহার করার আগে পাসওয়ার্ড দিয়ে লগইন করুন।\nলিখুন: `/pass পাসওয়ার্ড`", { parse_mode: "Markdown" });
+        return bot.sendMessage(chatId, "🔒 পাসওয়ার্ড দিয়ে লগইন করুন।\nলিখুন: `/pass পাসওয়ার্ড`", { parse_mode: "Markdown" });
     }
 
     const phone = text.replace('+', '').replace(/ /g, '').replace(/-/g, '');
@@ -99,7 +109,7 @@ bot.on('message', async (msg) => {
     }
 
     if (!waSock) {
-        return bot.sendMessage(chatId, "⚠️ WhatsApp কানেকশন রেডি হচ্ছে, কয়েক সেকেন্ড পর আবার চেষ্টা করুন।");
+        return bot.sendMessage(chatId, "⚠️ WhatsApp কানেকশন রেডি হচ্ছে, একটু পর চেষ্টা করুন।");
     }
 
     bot.sendMessage(chatId, `⏳ ${phone} নম্বরটি চেক করা হচ্ছে...`);
