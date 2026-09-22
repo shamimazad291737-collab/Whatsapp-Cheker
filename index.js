@@ -2,7 +2,10 @@ const { default: makeWASocket, useMultiFileAuthState, disconnectReason, Browsers
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE';
+// ১. কনফিগারেশন
+const TELEGRAM_TOKEN = '8828385782:AAHbRFf0YcFqmWSXiAH1mYXMpUxRdACRFhE'; // BotFather-এর টোকেন
+const ADMIN_ID = 7388500439; // আপনার Numeric Telegram ID (@userinfobot থেকে নেওয়া)
+let currentPassword = "291736"; // বটের পাসওয়ার্ড
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,9 +14,25 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 const userSockets = {};
-const userStates = {}; // ইউজার ইনপুট ট্র্যাক করার জন্য
+const userStates = {};
+const authenticatedUsers = new Set(); // পাসওয়ার্ড দেওয়া ইউজারদের লিস্ট
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// মূল বাটন মেনু
+function getMainButtons() {
+    return {
+        inline_keyboard: [
+            [
+                { text: "🔗 Link WhatsApp", callback_data: "cmd_link" },
+                { text: "📱 Check Number", callback_data: "cmd_check" }
+            ],
+            [
+                { text: "ℹ️ Help & Status", callback_data: "cmd_help" }
+            ]
+        ]
+    };
+}
 
 async function getUserSocket(chatId) {
     if (userSockets[chatId]) return userSockets[chatId];
@@ -32,7 +51,7 @@ async function getUserSocket(chatId) {
     waSock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'open') {
-            bot.sendMessage(chatId, "✅ **WhatsApp successfully connected!**\n\nএখন নিচের '📱 Check Number' বাটনে ক্লিক করে যেকোনো নম্বর ফিল্টার করতে পারবেন।", {
+            bot.sendMessage(chatId, "✅ **WhatsApp successfully connected!**\n\nএখন '📱 Check Number' বাটনে ক্লিক করে নম্বর ফিল্টার করুন।", {
                 parse_mode: "Markdown",
                 reply_markup: getMainButtons()
             });
@@ -47,45 +66,65 @@ async function getUserSocket(chatId) {
     return waSock;
 }
 
-// মূল বাটন ইন্টারফেস
-function getMainButtons() {
-    return {
-        inline_keyboard: [
-            [
-                { text: "🔗 Link WhatsApp", callback_data: "cmd_link" },
-                { text: "📱 Check Number", callback_data: "cmd_check" }
-            ],
-            [
-                { text: "ℹ️ Help & Status", callback_data: "cmd_help" }
-            ]
-        ]
-    };
-}
-
 // /start কমান্ড
 bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, "👋 **স্বাগতম WhatsApp Checker বট-এ!**\n\nনিচের বাটন থেকে আপনার পছন্দমতো অপশন বেছে নিন:", {
-        parse_mode: "Markdown",
-        reply_markup: getMainButtons()
-    });
+    const chatId = msg.chat.id;
+
+    // অ্যাডমিনকে সরাসরি ঢুকতে দেওয়া হবে
+    if (msg.from.id === ADMIN_ID) {
+        authenticatedUsers.add(chatId);
+        return bot.sendMessage(chatId, "👑 **স্বাগতম অ্যাডমিন!**\n\nপাসওয়ার্ড পরিবর্তন করতে লিখুন: `/setpass নতুন_পাসওয়ার্ড`", {
+            parse_mode: "Markdown",
+            reply_markup: getMainButtons()
+        });
+    }
+
+    // ইউজার যদি অলরেডি পাসওয়ার্ড দিয়ে থাকে
+    if (authenticatedUsers.has(chatId)) {
+        bot.sendMessage(chatId, "👋 **স্বাগতম!** নিচের বাটন থেকে অপশন বেছে নিন:", {
+            parse_mode: "Markdown",
+            reply_markup: getMainButtons()
+        });
+    } else {
+        userStates[chatId] = "WAITING_FOR_PASSWORD";
+        bot.sendMessage(chatId, "🔒 **বটটি ব্যবহার করতে পাসওয়ার্ড লাগবে।**\n\nঅনুগোছ করে পাসওয়ার্ডটি পাঠান:");
+    }
 });
 
-// বাটন ক্লিকে রেসপন্স (Callback Query)
+// অ্যাডমিনের পাসওয়ার্ড পরিবর্তনের কমান্ড
+bot.onText(/\/setpass (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+
+    if (msg.from.id !== ADMIN_ID) {
+        return bot.sendMessage(chatId, "⚠️ শুধুমাত্র অ্যাডমিন পাসওয়ার্ড পরিবর্তন করতে পারবে।");
+    }
+
+    const newPass = match[1].trim();
+    currentPassword = newPass;
+    bot.sendMessage(chatId, `✅ নতুন পাসওয়ার্ড সেট করা হয়েছে: \`${newPass}\``, { parse_mode: "Markdown" });
+});
+
+// বাটন ইন্টারঅ্যাকশন
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const action = query.data;
 
-    // বাটন ক্লিক রিসিভ একনলেজমেন্ট
     bot.answerCallbackQuery(query.id);
+
+    // পাসওয়ার্ড ভেরিফিকেশন চেক
+    if (!authenticatedUsers.has(chatId) && query.from.id !== ADMIN_ID) {
+        userStates[chatId] = "WAITING_FOR_PASSWORD";
+        return bot.sendMessage(chatId, "🔒 **দয়া করে প্রথমে সঠিক পাসওয়ার্ড দিয়ে লগইন করুন।**");
+    }
 
     if (action === "cmd_link") {
         userStates[chatId] = "WAITING_FOR_LINK_NUMBER";
-        bot.sendMessage(chatId, "📲 **আপনার WhatsApp নম্বরটি দিন** (যেমন: `8801700000000`):\n\n⚠️ রেস্ট্রিকশন এড়াতে অবশ্যই কান্ট্রি কোডসহ দিন।", { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, "📲 **আপনার WhatsApp নম্বরটি দিন** (যেমন: `8801700000000`):", { parse_mode: "Markdown" });
 
     } else if (action === "cmd_check") {
         const waSock = userSockets[chatId];
         if (!waSock || !waSock.authState.creds.registered) {
-            return bot.sendMessage(chatId, "⚠️ **আপনার WhatsApp কানেক্ট করা নেই!**\n\nপ্রথমে '🔗 Link WhatsApp' বাটনে চাপ দিয়ে অ্যাকাউন্ট যুক্ত করুন।", {
+            return bot.sendMessage(chatId, "⚠️ **আপনার WhatsApp কানেক্ট করা নেই!**\n\nপ্রথমে '🔗 Link WhatsApp' বাটনে চাপ দিন।", {
                 reply_markup: getMainButtons()
             });
         }
@@ -94,13 +133,13 @@ bot.on('callback_query', async (query) => {
 
     } else if (action === "cmd_help") {
         const isConnected = userSockets[chatId]?.authState?.creds?.registered ? "✅ Connected" : "❌ Not Connected";
-        bot.sendMessage(chatId, `ℹ️ **Bot Status:**\n- WhatsApp Status: ${isConnected}\n\nধাপসমূহ:\n১. 'Link WhatsApp' বাটনে চাপুন ও নম্বর দিন।\n২. পাওয়া ৮ ডিজিটের কোডটি WhatsApp Linked Devices-এ বসান।\n৩. অ্যাকাউন্ট কানেক্ট হলে 'Check Number' দিয়ে ওটিপি ফিল্টার করুন।`, {
+        bot.sendMessage(chatId, `ℹ️ **Bot Status:**\n- WhatsApp Status: ${isConnected}`, {
             reply_markup: getMainButtons()
         });
     }
 });
 
-// মেসেজ রিসিভার (ইনপুট প্রসেস করা)
+// মেসেজ রিসিভার
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
@@ -109,7 +148,21 @@ bot.on('message', async (msg) => {
 
     const state = userStates[chatId];
 
-    // ১. হোয়াটসঅ্যাপ লিঙ্ক করার নম্বর ইনপুট
+    // ১. পাসওয়ার্ড ইনপুট ভেরিফিকেশন
+    if (!authenticatedUsers.has(chatId) && msg.from.id !== ADMIN_ID) {
+        if (text === currentPassword) {
+            authenticatedUsers.add(chatId);
+            delete userStates[chatId];
+            return bot.sendMessage(chatId, "🎉 **পাসওয়ার্ড সঠিক হয়েছে!**\n\nনিচের বাটন থেকে অপশন বেছে নিন:", {
+                parse_mode: "Markdown",
+                reply_markup: getMainButtons()
+            });
+        } else {
+            return bot.sendMessage(chatId, "❌ **ভুল পাসওয়ার্ড!** আবার চেষ্টা করুন:");
+        }
+    }
+
+    // ২. হোয়াটসঅ্যাপ লিঙ্ক করার নম্বর ইনপুট
     if (state === "WAITING_FOR_LINK_NUMBER") {
         delete userStates[chatId];
         const phone = text.replace('+', '').replace(/ /g, '');
@@ -118,30 +171,30 @@ bot.on('message', async (msg) => {
             return bot.sendMessage(chatId, "❌ সঠিক নম্বর দিন। উদাহরণ: `8801700000000`", { reply_markup: getMainButtons() });
         }
 
-        bot.sendMessage(chatId, "⏳ Pairing Code তৈরি করা হচ্ছে, অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করুন...");
+        bot.sendMessage(chatId, "⏳ Pairing Code তৈরি করা হচ্ছে...");
 
         try {
             const waSock = await getUserSocket(chatId);
-            await delay(5000); // Anti-spam delay
+            await delay(5000);
 
             let code = await waSock.requestPairingCode(phone);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
 
-            bot.sendMessage(chatId, `🔑 **আপনার Pairing Code:** \`${code}\`\n\n১. আপনার মোবাইলের WhatsApp খুলুন > Settings > Linked Devices\n২. **Link with phone number** সিলেক্ট করুন\n৩. উপরের কোডটি বসিয়ে দিন।`, {
+            bot.sendMessage(chatId, `🔑 **আপনার Pairing Code:** \`${code}\`\n\nWhatsApp > Linked Devices > Link with phone number-এ কোডটি বসান।`, {
                 parse_mode: "Markdown",
                 reply_markup: getMainButtons()
             });
         } catch (err) {
-            bot.sendMessage(chatId, "❌ কোড জেনারেট হতে সমস্যা হয়েছে। হোয়াটসঅ্যাপ রেস্ট্রিকশনে থাকলে বা বারবার চেষ্টার কারণে এটি হতে পারে।", { reply_markup: getMainButtons() });
+            bot.sendMessage(chatId, "❌ কোড জেনারেট হতে সমস্যা হয়েছে।", { reply_markup: getMainButtons() });
         }
 
-    // ২. নম্বর চেক করার ইনপুট
+    // ৩. নম্বর চেক ইনপুট
     } else if (state === "WAITING_FOR_CHECK_NUMBER" || userSockets[chatId]?.authState?.creds?.registered) {
         delete userStates[chatId];
         const waSock = userSockets[chatId];
 
         if (!waSock || !waSock.authState.creds.registered) {
-            return bot.sendMessage(chatId, "⚠️ আপনার WhatsApp কানেক্ট করা নেই! আগে লিঙ্ক করুন।", { reply_markup: getMainButtons() });
+            return bot.sendMessage(chatId, "⚠️ আপনার WhatsApp কানেক্ট করা নেই!", { reply_markup: getMainButtons() });
         }
 
         const checkPhone = text.replace('+', '').replace(/ /g, '').replace(/-/g, '');
@@ -156,11 +209,10 @@ bot.on('message', async (msg) => {
             if (result && result.exists) {
                 bot.sendMessage(chatId, `📱 নম্বর: +${checkPhone}\n❌ **LOGIN NOT AVAILABLE** (অ্যাকাউন্ট তৈরি করা আছে)`, { reply_markup: getMainButtons() });
             } else {
-                bot.sendMessage(chatId, `📱 নম্বর: +${checkPhone}\n✅ **FRESH / HIGH OTP RATE** (হোয়াটসঅ্যাপ অ্যাকাউন্ট নেই, ওটিপি আসবে)`, { reply_markup: getMainButtons() });
+                bot.sendMessage(chatId, `📱 নম্বর: +${checkPhone}\n✅ **FRESH / HIGH OTP RATE** (ওটিপি আসবে)`, { reply_markup: getMainButtons() });
             }
         } catch (error) {
-            bot.sendMessage(chatId, "❌ চেক করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", { reply_markup: getMainButtons() });
+            bot.sendMessage(chatId, "❌ চেক করতে সমস্যা হয়েছে।", { reply_markup: getMainButtons() });
         }
     }
 });
-                
