@@ -1,48 +1,50 @@
-const { default: makeWASocket, useMultiFileAuthState, disconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    fetchLatestBaileysVersion, 
+    Browsers,
+    makeCacheableSignalKeyStore
+} = require('@whiskeysockets/baileys');
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
+const pino = require('pino');
 
-// 1. Configuration (Render Environment Variable)
+// 1. Configuration
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; 
 const ADMIN_ID = 7388500439; 
 let currentPassword = "291736"; 
 
 if (!TELEGRAM_TOKEN) {
-    console.error("CRITICAL ERROR: TELEGRAM_TOKEN missing in Render Environment Variables!");
+    console.error("CRITICAL ERROR: TELEGRAM_TOKEN missing!");
     process.exit(1);
 }
 
-// Express Keep-Alive Web Server for Render
+// Keep-alive server
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('WhatsApp Checker Bot is Running Smoothly!'));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.get('/', (req, res) => res.send('WhatsApp Checker active!'));
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
-// Prevent Unhandled Error Crashing (Status 1 Exit fix)
-bot.on('polling_error', (error) => {
-    if (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict')) {
-        console.error('CRITICAL: Multi-instance Conflict! Make sure only 1 instance is running.');
-    } else {
-        console.error('Polling error:', error.message);
+// Multi-instance & crash prevention
+bot.on('polling_error', (err) => {
+    if (err.message.includes('409 Conflict')) {
+        console.error('Multi-instance conflict! Change token or stop other instance.');
     }
 });
 
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception caught to prevent crash:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection caught to prevent crash:', reason);
-});
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
+process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
 
 const userSockets = {};
 const userStates = {};
 const authenticatedUsers = new Set(); 
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
 function getMainButtons() {
     return {
@@ -58,49 +60,65 @@ function getMainButtons() {
     };
 }
 
+// Fixed WhatsApp Connection Handler
 async function getUserSocket(chatId) {
     if (userSockets[chatId]) return userSockets[chatId];
 
-    const sessionDir = `./sessions/session_${chatId}`;
+    const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
+    if (!fs.existsSync(sessionDir)) {
+        fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
-    // Latest Baileys Version fetch to fix pairing stuck issue
-    let version;
+    // Fetch actual latest version
+    let version = [2, 3000, 1015901307];
     try {
         const fetchRes = await fetchLatestBaileysVersion();
         version = fetchRes.version;
     } catch (e) {
-        version = [2, 3000, 1015901307];
+        console.log("Using fallback Baileys version");
     }
 
     const waSock = makeWASocket({
         version,
-        auth: state,
+        logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'), // Fixes 'Couldn't link device' & 'Logging in stuck'
-        keepAliveIntervalMs: 30000,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
-        syncFullHistory: false
+        // Crucial Fix: macOS / Safari browser config stops "Logging in..." hanging
+        browser: Browsers.macOS('Desktop'),
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+        },
+        markOnlineOnConnect: true,
+        generateHighQualityLinkPreview: false,
+        syncFullHistory: false,
+        retryRequestOptions: {
+            delayMs: 2000,
+            maxRetries: 5
+        }
     });
 
     waSock.ev.on('creds.update', saveCreds);
-    
-    waSock.ev.on('connection.update', (update) => {
+
+    waSock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        
+
         if (connection === 'open') {
-            bot.sendMessage(chatId, "✅ **WhatsApp successfully connected!**\n\nEhbar '📱 Check Number' batane click kore number filtering shuru korun.", {
+            bot.sendMessage(chatId, "✅ **WhatsApp-e Safollo-bhabe Connect Hoyeche!**\n\nEhbar '📱 Check Number' batan click kore number filter korun.", {
                 parse_mode: "Markdown",
                 reply_markup: getMainButtons()
             });
         } else if (connection === 'close') {
             delete userSockets[chatId];
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== disconnectReason.loggedOut;
-            if (shouldReconnect) {
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            
+            if (reason !== DisconnectReason.loggedOut) {
+                console.log(`Reconnecting for ${chatId}... Reason:${reason}`);
+                await delay(3000);
                 getUserSocket(chatId);
             } else {
+                console.log(`Logged out ${chatId}. Cleaning session...`);
                 try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
             }
         }
@@ -110,43 +128,34 @@ async function getUserSocket(chatId) {
     return waSock;
 }
 
-// /start command
+// Start Command
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
 
     if (msg.from.id === ADMIN_ID) {
         authenticatedUsers.add(chatId);
-        return bot.sendMessage(chatId, "👑 **Admin Dashboard Active!**\n\nPassword change korar jonno: `/setpass notun_password`", {
+        return bot.sendMessage(chatId, "👑 **Admin Mode Activated**", {
             parse_mode: "Markdown",
             reply_markup: getMainButtons()
         });
     }
 
     if (authenticatedUsers.has(chatId)) {
-        bot.sendMessage(chatId, "👋 Welcome back! Nicher menu theke option select korun:", {
-            parse_mode: "Markdown",
-            reply_markup: getMainButtons()
-        });
+        bot.sendMessage(chatId, "👋 Welcome back!", { reply_markup: getMainButtons() });
     } else {
         userStates[chatId] = "WAITING_FOR_PASSWORD";
-        bot.sendMessage(chatId, "🔒 **Password Required!**\n\nDoya kore bot-er password-ti din:");
+        bot.sendMessage(chatId, "🔒 **Password Required!**\n\nDoya kore password din:");
     }
 });
 
-// Admin Password Update Command
+// Admin Password Change
 bot.onText(/\/setpass (.+)/, (msg, match) => {
-    const chatId = msg.chat.id;
-
-    if (msg.from.id !== ADMIN_ID) {
-        return bot.sendMessage(chatId, "⚠️ Sudhu Admin password change korte parbe.");
-    }
-
-    const newPass = match[1].trim();
-    currentPassword = newPass;
-    bot.sendMessage(chatId, `✅ Notun password set hoyeche: \`${newPass}\``, { parse_mode: "Markdown" });
+    if (msg.from.id !== ADMIN_ID) return;
+    currentPassword = match[1].trim();
+    bot.sendMessage(msg.chat.id, `✅ Notun password: \`${currentPassword}\``, { parse_mode: "Markdown" });
 });
 
-// Callback Query Handler
+// Buttons Action
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const action = query.data;
@@ -155,138 +164,129 @@ bot.on('callback_query', async (query) => {
 
     if (!authenticatedUsers.has(chatId) && query.from.id !== ADMIN_ID) {
         userStates[chatId] = "WAITING_FOR_PASSWORD";
-        return bot.sendMessage(chatId, "🔒 Doya kore prothome password diye access nin.");
+        return bot.sendMessage(chatId, "🔒 Prothome password din.");
     }
 
     if (action === "cmd_link") {
         userStates[chatId] = "WAITING_FOR_LINK_NUMBER";
-        bot.sendMessage(chatId, "📲 **Apnar WhatsApp number-ti din** (Country code soho, e.g., `8801700000000`):", { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, "📲 Country code সহ apnar WhatsApp number din (e.g. `8801700000000`):", { parse_mode: "Markdown" });
 
     } else if (action === "cmd_check") {
         const waSock = userSockets[chatId];
         if (!waSock || !waSock.authState?.creds?.registered) {
-            return bot.sendMessage(chatId, "⚠️ **Apnar WhatsApp connect kora nei!**\n\nProthome '🔗 Link WhatsApp' batane click korun.", {
-                reply_markup: getMainButtons()
-            });
+            return bot.sendMessage(chatId, "⚠️ Prothome WhatsApp link korun!", { reply_markup: getMainButtons() });
         }
         userStates[chatId] = "WAITING_FOR_CHECK_NUMBER";
-        bot.sendMessage(chatId, "🔍 **Jey number-ti check korte chan seti pathan** (e.g., `8801800000000`):", { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, "🔍 Jey number check korben seti din (e.g. `8801800000000`):", { parse_mode: "Markdown" });
 
     } else if (action === "cmd_help") {
         const isConnected = userSockets[chatId]?.authState?.creds?.registered ? "✅ Connected" : "❌ Not Connected";
-        bot.sendMessage(chatId, `ℹ️ **Bot Status:**\n- WhatsApp Status: ${isConnected}`, {
-            reply_markup: getMainButtons()
-        });
+        bot.sendMessage(chatId, `ℹ️ **Bot Status:** ${isConnected}`, { reply_markup: getMainButtons() });
     }
 });
 
-// Main Message Receiver & Checker Logic
+// Main Message Processor
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
     if (!text || text.startsWith('/')) return;
 
-    // Password Verification
+    // Password Check
     if (!authenticatedUsers.has(chatId) && msg.from.id !== ADMIN_ID) {
         if (text === currentPassword) {
             authenticatedUsers.add(chatId);
             delete userStates[chatId];
-            return bot.sendMessage(chatId, "🎉 **Password Sothik Hoyeche!**\n\nNicher button theke option select korun:", {
-                parse_mode: "Markdown",
-                reply_markup: getMainButtons()
-            });
+            return bot.sendMessage(chatId, "🎉 Access Granted!", { reply_markup: getMainButtons() });
         } else {
-            return bot.sendMessage(chatId, "❌ **Bhul Password!** Abar chesta korun:");
+            return bot.sendMessage(chatId, "❌ Bhul Password!");
         }
     }
 
     const state = userStates[chatId];
 
-    // WhatsApp Link Handler
+    // Pairing Request
     if (state === "WAITING_FOR_LINK_NUMBER") {
         delete userStates[chatId];
-        const phone = text.replace('+', '').replace(/\s+/g, '');
+        const phone = text.replace(/[^0-9]/g, '');
 
-        if (isNaN(phone) || phone.length < 10) {
-            return bot.sendMessage(chatId, "❌ Sothik number din. Udahoron: `8801700000000`", { reply_markup: getMainButtons() });
+        if (phone.length < 10) {
+            return bot.sendMessage(chatId, "❌ Invalid Number!", { reply_markup: getMainButtons() });
         }
 
-        bot.sendMessage(chatId, "⏳ Pairing Code toiri kora hocche...");
+        bot.sendMessage(chatId, "⏳ Pairing code toiri hocche...");
 
         try {
             const waSock = await getUserSocket(chatId);
-            await delay(3000);
+            await delay(4000); // Allow WebSocket handshake to complete fully
 
             let code = await waSock.requestPairingCode(phone);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
 
-            bot.sendMessage(chatId, `🔑 **Apnar Pairing Code:** \`${code}\`\n\nWhatsApp > Linked Devices > Link with phone number-e druto eii code-ti boshan.`, {
+            bot.sendMessage(chatId, `🔑 **Pairing Code:** \`${code}\`\n\nWhatsApp > Linked Devices > Link with phone number-e boshān.`, {
                 parse_mode: "Markdown",
                 reply_markup: getMainButtons()
             });
         } catch (err) {
-            console.error("Pairing Request Error:", err);
-            bot.sendMessage(chatId, "❌ Code generate hote problem hoyeche. Abar chesta korun.", { reply_markup: getMainButtons() });
+            console.error("Pairing Error:", err);
+            bot.sendMessage(chatId, "❌ Pairing fail hoyeche. Abar chesta korun.", { reply_markup: getMainButtons() });
         }
 
-    // Advanced Number Check Handler
+    // Number Check Logic
     } else if (state === "WAITING_FOR_CHECK_NUMBER") {
         delete userStates[chatId];
         const waSock = userSockets[chatId];
 
         if (!waSock || !waSock.authState?.creds?.registered) {
-            return bot.sendMessage(chatId, "⚠️ Apnar WhatsApp connect kora nei!", { reply_markup: getMainButtons() });
+            return bot.sendMessage(chatId, "⚠️ WhatsApp connect kora nei!", { reply_markup: getMainButtons() });
         }
 
-        const checkPhone = text.replace('+', '').replace(/[^0-9]/g, '');
-        if (!checkPhone || isNaN(checkPhone)) return bot.sendMessage(chatId, "❌ Sothik number din.", { reply_markup: getMainButtons() });
+        const checkPhone = text.replace(/[^0-9]/g, '');
+        if (!checkPhone) return bot.sendMessage(chatId, "❌ Sothik number din.", { reply_markup: getMainButtons() });
 
         const jid = `${checkPhone}@s.whatsapp.net`;
-        bot.sendMessage(chatId, `⏳ \`+${checkPhone}\` number-er details check kora hocche...`, { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, `⏳ \`+${checkPhone}\` check kora hocche...`, { parse_mode: "Markdown" });
 
         try {
             await delay(1000);
             const [result] = await waSock.onWhatsApp(checkPhone);
 
             if (!result || !result.exists) {
-                // Number Fresh / Not Registered on WhatsApp
                 const report = `📱 **Number:** \`+${checkPhone}\`\n` +
                                `STATUS: ✅ **FRESH NUMBER**\n` +
-                               `OTP Send Chance: **95%** (High Success Rate)\n` +
-                               `Account Condition: **No WhatsApp Account Found**`;
+                               `Send Success Rate: **95%**\n` +
+                               `Condition: **No Active WhatsApp Account**`;
                 
                 bot.sendMessage(chatId, report, { parse_mode: "Markdown", reply_markup: getMainButtons() });
             } else {
-                // Registered WhatsApp Account -> Deep Check (Bio / Picture)
                 let profilePic = null;
                 let statusBio = null;
 
                 try { profilePic = await waSock.profilePictureUrl(jid, 'image'); } catch (e) {}
                 try { statusBio = await waSock.fetchStatus(jid); } catch (e) {}
 
-                let accountType = "";
-                let codeChance = "";
+                let statusText = "";
+                let sendRate = "";
 
                 if (!profilePic && !statusBio) {
-                    accountType = "⚠️ **NEW / SEMI-FRESH ACCOUNT** (No DP/Bio)";
-                    codeChance = "**75%** (Medium-High)";
+                    statusText = "⚠️ **SEMI-FRESH (No DP/Bio)**";
+                    sendRate = "**75%**";
                 } else {
-                    accountType = "❌ **LOGIN NOT AVAILABLE** (Active/Old Account)";
-                    codeChance = "**25%** (Low Chance for New Login/OTP)";
+                    statusText = "❌ **LOGIN NOT AVAILABLE (Active Account)**";
+                    sendRate = "**20%**";
                 }
 
                 const report = `📱 **Number:** \`+${checkPhone}\`\n` +
-                               `STATUS: ${accountType}\n` +
-                               `Code Send / OTP Success Rate: ${codeChance}\n` +
-                               `Bio Status: \`${statusBio?.status || "None"}\``;
+                               `STATUS: ${statusText}\n` +
+                               `Send/Delivery Chance: ${sendRate}\n` +
+                               `Bio: \`${statusBio?.status || "None"}\``;
 
                 bot.sendMessage(chatId, report, { parse_mode: "Markdown", reply_markup: getMainButtons() });
             }
         } catch (error) {
-            console.error("Check Execution Error:", error);
-            bot.sendMessage(chatId, "❌ Check korte problem hoyeche. WhatsApp session active ache kina check korun.", { reply_markup: getMainButtons() });
+            console.error("Check Error:", error);
+            bot.sendMessage(chatId, "❌ Check fail hoyeche.", { reply_markup: getMainButtons() });
         }
     }
 });
-            
+        
