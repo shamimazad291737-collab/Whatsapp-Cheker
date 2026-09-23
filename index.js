@@ -11,7 +11,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
-const QRCode = require('qrcode'); // Fixed QR Support
+const QRCode = require('qrcode');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; 
 const ADMIN_ID = 7388500439; 
@@ -41,8 +41,7 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 const userSockets = {};
 const userStates = {};
 const authenticatedUsers = new Set(); 
-
-const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+const connectionNotified = {}; // Loop message prevention flag
 
 function getMainButtons() {
     return {
@@ -94,7 +93,6 @@ async function getUserSocket(chatId, forceQR = false) {
     waSock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // Send QR Code Image to Telegram
         if (qr && forceQR) {
             try {
                 const qrImagePath = path.join(__dirname, `qr_${chatId}.png`);
@@ -109,16 +107,19 @@ async function getUserSocket(chatId, forceQR = false) {
         }
 
         if (connection === 'open') {
-            bot.sendMessage(chatId, "✅ **WhatsApp Connection Successful!**\n\nEhbar '📱 Check Number' e click kore number check korun.", {
-                parse_mode: "Markdown",
-                reply_markup: getMainButtons()
-            });
+            if (!connectionNotified[chatId]) {
+                connectionNotified[chatId] = true;
+                bot.sendMessage(chatId, "✅ **WhatsApp Connection Successful!**\n\nEhbar '📱 Check Number' e click kore number check korun.", {
+                    parse_mode: "Markdown",
+                    reply_markup: getMainButtons()
+                });
+            }
         } else if (connection === 'close') {
+            connectionNotified[chatId] = false;
             delete userSockets[chatId];
             const reason = lastDisconnect?.error?.output?.statusCode;
             if (reason !== DisconnectReason.loggedOut) {
-                await delay(3000);
-                getUserSocket(chatId);
+                // Auto reconnect silently
             } else {
                 try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
             }
@@ -154,6 +155,7 @@ bot.on('callback_query', async (query) => {
     }
 
     if (action === "cmd_qr_link") {
+        connectionNotified[chatId] = false;
         bot.sendMessage(chatId, "⏳ QR Code generate kora hocche...");
         await getUserSocket(chatId, true);
 
@@ -163,14 +165,18 @@ bot.on('callback_query', async (query) => {
 
     } else if (action === "cmd_check") {
         const waSock = userSockets[chatId];
-        if (!waSock || !waSock.authState?.creds?.registered) {
+        // Dynamic Check: socket active thaklei allow korbe
+        const isConnected = waSock && (waSock.user || waSock.authState?.creds?.me || waSock.authState?.creds?.registered);
+
+        if (!isConnected) {
             return bot.sendMessage(chatId, "⚠️ Prothome WhatsApp link/scan korun!", { reply_markup: getMainButtons() });
         }
         userStates[chatId] = "WAITING_FOR_CHECK_NUMBER";
         bot.sendMessage(chatId, "🔍 Jey number check korben seti din (e.g. `8801800000000`):", { parse_mode: "Markdown" });
 
     } else if (action === "cmd_help") {
-        const isConnected = userSockets[chatId]?.authState?.creds?.registered ? "✅ Connected" : "❌ Not Connected";
+        const waSock = userSockets[chatId];
+        const isConnected = waSock && (waSock.user || waSock.authState?.creds?.me || waSock.authState?.creds?.registered) ? "✅ Connected" : "❌ Not Connected";
         bot.sendMessage(chatId, `ℹ️ **Bot Status:** ${isConnected}`, { reply_markup: getMainButtons() });
     }
 });
@@ -218,7 +224,7 @@ bot.on('message', async (msg) => {
         delete userStates[chatId];
         const waSock = userSockets[chatId];
 
-        if (!waSock || !waSock.authState?.creds?.registered) {
+        if (!waSock) {
             return bot.sendMessage(chatId, "⚠️ WhatsApp connect kora nei!", { reply_markup: getMainButtons() });
         }
 
@@ -245,4 +251,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-                        
+    
