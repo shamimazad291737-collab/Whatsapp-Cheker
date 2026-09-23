@@ -22,10 +22,17 @@ if (!TELEGRAM_TOKEN) {
     process.exit(1);
 }
 
+// Express HTTP Server (Keep-Alive for UptimeRobot)
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('WhatsApp Checker Active!'));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+app.get('/', (req, res) => {
+    res.status(200).send('WhatsApp Checker Active!');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
@@ -63,7 +70,6 @@ async function getUserSocket(chatId, forceQR = false) {
 
     const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
     
-    // Reset session directory if forced QR requested
     if (forceQR && fs.existsSync(sessionDir)) {
         try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
     }
@@ -74,7 +80,6 @@ async function getUserSocket(chatId, forceQR = false) {
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
-    // Fetch stable Baileys Web version
     let version = [2, 3000, 1015901307];
     try {
         const fetchRes = await fetchLatestBaileysVersion();
@@ -85,7 +90,6 @@ async function getUserSocket(chatId, forceQR = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        // Ubuntu/Chrome User-Agent fixes 'Couldn't link device'
         browser: Browsers.ubuntu('Chrome'), 
         auth: {
             creds: state.creds,
@@ -129,9 +133,7 @@ async function getUserSocket(chatId, forceQR = false) {
             connectionNotified[chatId] = false;
             delete userSockets[chatId];
             const reason = lastDisconnect?.error?.output?.statusCode;
-            if (reason !== DisconnectReason.loggedOut) {
-                // Auto reconnect
-            } else {
+            if (reason === DisconnectReason.loggedOut) {
                 try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
             }
         }
@@ -261,4 +263,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-                                                                                               
+            
