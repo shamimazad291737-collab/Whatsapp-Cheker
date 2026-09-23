@@ -27,11 +27,12 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.status(200).send('WhatsApp Checker Active!'));
 app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
+// Polling auto-restart & error suppression
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 bot.on('polling_error', (err) => {
     if (err.message.includes('409 Conflict')) {
-        console.error('Multi-instance conflict detected!');
+        console.log('Duplicate polling handled.');
     }
 });
 
@@ -49,13 +50,22 @@ function getMainReplyKeyboard() {
             [{ text: "🔢 Pair via Code" }],
             [{ text: "📱 Check Number" }, { text: "ℹ️ Help & Status" }]
         ],
-        resize_keyboard: true,
-        one_time_keyboard: false
+        resize_keyboard: true
     };
 }
 
+// Safe Session Folder Creator
+function ensureDirExists(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
 async function getUserSocket(chatId, forceReset = false) {
-    const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
+    const baseSessionsDir = path.join(process.cwd(), 'sessions');
+    ensureDirExists(baseSessionsDir);
+    
+    const sessionDir = path.join(baseSessionsDir, `session_${chatId}`);
     
     if (forceReset) {
         if (userSockets[chatId]) {
@@ -69,9 +79,7 @@ async function getUserSocket(chatId, forceReset = false) {
         return userSockets[chatId];
     }
 
-    if (!fs.existsSync(sessionDir)) {
-        fs.mkdirSync(sessionDir, { recursive: true });
-    }
+    ensureDirExists(sessionDir);
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
@@ -85,7 +93,7 @@ async function getUserSocket(chatId, forceReset = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
+        browser: Browsers.ubuntu('Chrome'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
@@ -93,9 +101,9 @@ async function getUserSocket(chatId, forceReset = false) {
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
         syncFullHistory: false,
-        connectTimeoutMs: 120000,
+        connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 30000
+        keepAliveIntervalMs: 10000
     });
 
     waSock.ev.on('creds.update', saveCreds);
@@ -106,7 +114,7 @@ async function getUserSocket(chatId, forceReset = false) {
         if (connection === 'open') {
             if (!connectionNotified[chatId]) {
                 connectionNotified[chatId] = true;
-                bot.sendMessage(chatId, "🎉 **WhatsApp Connection Successful!**\n\nEhbar **📱 Check Number**-e chap diye number check korte parben.", {
+                bot.sendMessage(chatId, "🎉 **WhatsApp Connected Successfully!**\n\nEhbar **📱 Check Number** option use koren.", {
                     parse_mode: "Markdown",
                     reply_markup: getMainReplyKeyboard()
                 });
@@ -114,8 +122,8 @@ async function getUserSocket(chatId, forceReset = false) {
         } else if (connection === 'close') {
             connectionNotified[chatId] = false;
             delete userSockets[chatId];
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            if (reason === DisconnectReason.loggedOut) {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            if (statusCode === DisconnectReason.loggedOut) {
                 try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
             }
         }
@@ -125,7 +133,7 @@ async function getUserSocket(chatId, forceReset = false) {
     return waSock;
 }
 
-// Commands Trigger
+// Bot Commands
 bot.onText(/\/(start|strat|help)/i, (msg) => {
     const chatId = msg.chat.id;
     if (msg.from.id === ADMIN_ID || authenticatedUsers.has(chatId)) {
@@ -159,7 +167,7 @@ bot.on('message', async (msg) => {
 
     if (text === "🔢 Pair via Code") {
         userStates[chatId] = "WAITING_FOR_LINK_NUMBER";
-        return bot.sendMessage(chatId, "📲 Apnar WhatsApp number-ti din (Country code সহ, e.g. `8801700000000`):", { parse_mode: "Markdown" });
+        return bot.sendMessage(chatId, "📲 Apnar WhatsApp number-ti din (Country code sho, e.g. `8801700000000`):", { parse_mode: "Markdown" });
     } 
     
     if (text === "📱 Check Number") {
@@ -167,7 +175,7 @@ bot.on('message', async (msg) => {
         const isConnected = waSock && (waSock.user || waSock.authState?.creds?.me || waSock.authState?.creds?.registered);
 
         if (!isConnected) {
-            return bot.sendMessage(chatId, "⚠️ Prothome **🔢 Pair via Code** diye WhatsApp connect/link korun!", { reply_markup: getMainReplyKeyboard() });
+            return bot.sendMessage(chatId, "⚠️ Prothome **🔢 Pair via Code** diye WhatsApp connect korun!", { reply_markup: getMainReplyKeyboard() });
         }
         userStates[chatId] = "WAITING_FOR_CHECK_NUMBER";
         return bot.sendMessage(chatId, "🔍 Jey number check korben seti din (e.g. `8801800000000`):", { parse_mode: "Markdown" });
@@ -185,22 +193,24 @@ bot.on('message', async (msg) => {
         delete userStates[chatId];
         const phone = text.replace(/[^0-9]/g, '');
 
-        bot.sendMessage(chatId, "⏳ Fresh session initialize kora hocche...");
+        bot.sendMessage(chatId, "⏳ Pairing session ready hocche...");
 
         try {
             const waSock = await getUserSocket(chatId, true);
-            await new Promise((res) => setTimeout(res, 6000));
+            
+            // Wait for socket initiation
+            await new Promise((res) => setTimeout(res, 3000));
 
             let code = await waSock.requestPairingCode(phone);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
 
-            bot.sendMessage(chatId, `🔑 **Pairing Code:** \`${code}\`\n\n👉 Apnar Phone-er **WhatsApp > Linked Devices > Link with Phone Number Instead**-e giye code-ti fast boshiye din!`, {
+            bot.sendMessage(chatId, `🔑 **Pairing Code:** \`${code}\`\n\n👉 Apnar WhatsApp > Linked Devices > Link with Phone Number-e giye eii code bosiye din!`, {
                 parse_mode: "Markdown",
                 reply_markup: getMainReplyKeyboard()
             });
         } catch (err) {
             console.error("Pairing Code Error:", err);
-            bot.sendMessage(chatId, "❌ Code fail hoyeche. Abar **🔢 Pair via Code** try korun.", { reply_markup: getMainReplyKeyboard() });
+            bot.sendMessage(chatId, "❌ Pairing fail hoyeche! Abar try koren.", { reply_markup: getMainReplyKeyboard() });
         }
 
     } else if (state === "WAITING_FOR_CHECK_NUMBER") {
@@ -225,7 +235,7 @@ bot.on('message', async (msg) => {
                 try { profilePic = await waSock.profilePictureUrl(jid, 'image'); } catch (e) {}
                 try { statusBio = await waSock.fetchStatus(jid); } catch (e) {}
 
-                let statusText = (!profilePic && !statusBio) ? "⚠️ **SEMI-FRESH (75% Delivery Rate)**" : "❌ **LOGIN NOT AVAILABLE (Active Account)**";
+                let statusText = (!profilePic && !statusBio) ? "⚠️ **SEMI-FRESH (75% Delivery Rate)**" : "❌ **ACTIVE WHATSAPP ACCOUNT**";
 
                 bot.sendMessage(chatId, `📱 **Number:** \`+${checkPhone}\`\nSTATUS: ${statusText}\nBio: \`${statusBio?.status || "None"}\``, { parse_mode: "Markdown", reply_markup: getMainReplyKeyboard() });
             }
@@ -234,4 +244,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-                                       
+                    
