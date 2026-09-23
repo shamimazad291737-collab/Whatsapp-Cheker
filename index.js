@@ -22,17 +22,11 @@ if (!TELEGRAM_TOKEN) {
     process.exit(1);
 }
 
-// Express HTTP Server (Keep-Alive for UptimeRobot)
+// Express Keep-Alive Server
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-    res.status(200).send('WhatsApp Checker Active!');
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.get('/', (req, res) => res.status(200).send('WhatsApp Checker Active!'));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
@@ -66,14 +60,21 @@ function getMainButtons() {
 }
 
 async function getUserSocket(chatId, forceQR = false) {
-    if (userSockets[chatId] && !forceQR) return userSockets[chatId];
-
     const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
     
-    if (forceQR && fs.existsSync(sessionDir)) {
-        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
+    // Completely clear previous session cache if forced QR
+    if (forceQR) {
+        if (userSockets[chatId]) {
+            try { userSockets[chatId].end(undefined); } catch (e) {}
+            delete userSockets[chatId];
+        }
+        if (fs.existsSync(sessionDir)) {
+            try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
+        }
+    } else if (userSockets[chatId]) {
+        return userSockets[chatId];
     }
-    
+
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
     }
@@ -90,7 +91,8 @@ async function getUserSocket(chatId, forceQR = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'), 
+        // Windows Chrome Browser Fingerprint (WhatsApp Block Bypass)
+        browser: ["Windows", "Chrome", "122.0.6261.128"],
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
@@ -100,7 +102,11 @@ async function getUserSocket(chatId, forceQR = false) {
         syncFullHistory: false,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000
+        keepAliveIntervalMs: 15000,
+        retryRequestOptions: {
+            delayMs: 250,
+            maxRetries: 5
+        }
     });
 
     waSock.ev.on('creds.update', saveCreds);
@@ -113,7 +119,7 @@ async function getUserSocket(chatId, forceQR = false) {
                 const qrImagePath = path.join(__dirname, `qr_${chatId}.png`);
                 await QRCode.toFile(qrImagePath, qr, { margin: 2, scale: 8 });
                 await bot.sendPhoto(chatId, qrImagePath, {
-                    caption: "📸 **WhatsApp > Linked Devices > Link a Device** e giye eii QR code ti scan korun!"
+                    caption: "⚡ **FRESH QR CODE GENERATED!**\n\n📸 **WhatsApp > Linked Devices > Link a Device** e giye **১০-১৫ সেকেন্ডের মধ্যে** scan korun!"
                 });
                 if (fs.existsSync(qrImagePath)) fs.unlinkSync(qrImagePath);
             } catch (qrErr) {
@@ -169,7 +175,7 @@ bot.on('callback_query', async (query) => {
 
     if (action === "cmd_qr_link") {
         connectionNotified[chatId] = false;
-        bot.sendMessage(chatId, "⏳ QR Code generate kora hocche...");
+        bot.sendMessage(chatId, "⏳ Fresh QR Code generate kora hocche...");
         await getUserSocket(chatId, true);
 
     } else if (action === "cmd_link") {
@@ -263,4 +269,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-            
+                
