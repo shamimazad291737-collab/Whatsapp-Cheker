@@ -41,7 +41,7 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:
 const userSockets = {};
 const userStates = {};
 const authenticatedUsers = new Set(); 
-const connectionNotified = {}; // Loop message prevention flag
+const connectionNotified = {}; 
 
 function getMainButtons() {
     return {
@@ -62,12 +62,19 @@ async function getUserSocket(chatId, forceQR = false) {
     if (userSockets[chatId] && !forceQR) return userSockets[chatId];
 
     const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
+    
+    // Reset session directory if forced QR requested
+    if (forceQR && fs.existsSync(sessionDir)) {
+        try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
+    }
+    
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
+    // Fetch stable Baileys Web version
     let version = [2, 3000, 1015901307];
     try {
         const fetchRes = await fetchLatestBaileysVersion();
@@ -78,14 +85,18 @@ async function getUserSocket(chatId, forceQR = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
+        // Ubuntu/Chrome User-Agent fixes 'Couldn't link device'
+        browser: Browsers.ubuntu('Chrome'), 
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
         },
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
-        syncFullHistory: false
+        syncFullHistory: false,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000
     });
 
     waSock.ev.on('creds.update', saveCreds);
@@ -96,7 +107,7 @@ async function getUserSocket(chatId, forceQR = false) {
         if (qr && forceQR) {
             try {
                 const qrImagePath = path.join(__dirname, `qr_${chatId}.png`);
-                await QRCode.toFile(qrImagePath, qr);
+                await QRCode.toFile(qrImagePath, qr, { margin: 2, scale: 8 });
                 await bot.sendPhoto(chatId, qrImagePath, {
                     caption: "📸 **WhatsApp > Linked Devices > Link a Device** e giye eii QR code ti scan korun!"
                 });
@@ -119,7 +130,7 @@ async function getUserSocket(chatId, forceQR = false) {
             delete userSockets[chatId];
             const reason = lastDisconnect?.error?.output?.statusCode;
             if (reason !== DisconnectReason.loggedOut) {
-                // Auto reconnect silently
+                // Auto reconnect
             } else {
                 try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
             }
@@ -165,7 +176,6 @@ bot.on('callback_query', async (query) => {
 
     } else if (action === "cmd_check") {
         const waSock = userSockets[chatId];
-        // Dynamic Check: socket active thaklei allow korbe
         const isConnected = waSock && (waSock.user || waSock.authState?.creds?.me || waSock.authState?.creds?.registered);
 
         if (!isConnected) {
@@ -207,7 +217,7 @@ bot.on('message', async (msg) => {
 
         try {
             const waSock = await getUserSocket(chatId);
-            await delay(4000);
+            await new Promise((res) => setTimeout(res, 4000));
 
             let code = await waSock.requestPairingCode(phone);
             code = code?.match(/.{1,4}/g)?.join("-") || code;
@@ -251,4 +261,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-    
+                                                                                               
