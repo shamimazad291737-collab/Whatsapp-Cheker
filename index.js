@@ -62,7 +62,6 @@ function getMainButtons() {
 async function getUserSocket(chatId, forceQR = false) {
     const sessionDir = path.join(__dirname, 'sessions', `session_${chatId}`);
     
-    // Completely clear previous session cache if forced QR
     if (forceQR) {
         if (userSockets[chatId]) {
             try { userSockets[chatId].end(undefined); } catch (e) {}
@@ -91,8 +90,8 @@ async function getUserSocket(chatId, forceQR = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        // Windows Chrome Browser Fingerprint (WhatsApp Block Bypass)
-        browser: ["Windows", "Chrome", "122.0.6261.128"],
+        // Firefox Desktop emulation to fix "Logging in..." freeze
+        browser: Browsers.macOS('Firefox'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
@@ -102,11 +101,8 @@ async function getUserSocket(chatId, forceQR = false) {
         syncFullHistory: false,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 15000,
-        retryRequestOptions: {
-            delayMs: 250,
-            maxRetries: 5
-        }
+        keepAliveIntervalMs: 25000,
+        emitOwnEvents: false
     });
 
     waSock.ev.on('creds.update', saveCreds);
@@ -119,7 +115,7 @@ async function getUserSocket(chatId, forceQR = false) {
                 const qrImagePath = path.join(__dirname, `qr_${chatId}.png`);
                 await QRCode.toFile(qrImagePath, qr, { margin: 2, scale: 8 });
                 await bot.sendPhoto(chatId, qrImagePath, {
-                    caption: "⚡ **FRESH QR CODE GENERATED!**\n\n📸 **WhatsApp > Linked Devices > Link a Device** e giye **১০-১৫ সেকেন্ডের মধ্যে** scan korun!"
+                    caption: "⚡ **FRESH QR CODE GENERATED!**\n\n📸 **WhatsApp > Linked Devices > Link a Device** e giye **১০ সেকেন্ডের মধ্যে** scan korun!"
                 });
                 if (fs.existsSync(qrImagePath)) fs.unlinkSync(qrImagePath);
             } catch (qrErr) {
@@ -149,7 +145,8 @@ async function getUserSocket(chatId, forceQR = false) {
     return waSock;
 }
 
-bot.onText(/\/start/, (msg) => {
+// Auto handling for /start or any spelling mistake like /strat
+bot.onText(/\/(start|strat|help)/i, (msg) => {
     const chatId = msg.chat.id;
     if (msg.from.id === ADMIN_ID || authenticatedUsers.has(chatId)) {
         authenticatedUsers.add(chatId);
@@ -269,4 +266,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-                
+            
