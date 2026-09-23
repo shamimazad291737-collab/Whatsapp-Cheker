@@ -21,7 +21,7 @@ if (!TELEGRAM_TOKEN) {
     process.exit(1);
 }
 
-// Express Keep-Alive Server for UptimeRobot / Render
+// Keep-alive Express Server for Render / UptimeRobot
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.status(200).send('WhatsApp Checker Active!'));
@@ -43,7 +43,6 @@ const userStates = {};
 const authenticatedUsers = new Set(); 
 const connectionNotified = {}; 
 
-// Main Reply Keyboard Menu
 function getMainReplyKeyboard() {
     return {
         keyboard: [
@@ -86,7 +85,7 @@ async function getUserSocket(chatId, forceReset = false) {
         version,
         logger: pino({ level: 'fatal' }),
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
@@ -94,13 +93,9 @@ async function getUserSocket(chatId, forceReset = false) {
         markOnlineOnConnect: true,
         generateHighQualityLinkPreview: false,
         syncFullHistory: false,
-        connectTimeoutMs: 60000,
+        connectTimeoutMs: 90000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 15000,
-        retryRequestOptions: {
-            delayMs: 250,
-            maxRetries: 5
-        }
+        keepAliveIntervalMs: 10000
     });
 
     waSock.ev.on('creds.update', saveCreds);
@@ -130,7 +125,7 @@ async function getUserSocket(chatId, forceReset = false) {
     return waSock;
 }
 
-// Start / Help Commands
+// Commands Trigger
 bot.onText(/\/(start|strat|help)/i, (msg) => {
     const chatId = msg.chat.id;
     if (msg.from.id === ADMIN_ID || authenticatedUsers.has(chatId)) {
@@ -145,14 +140,13 @@ bot.onText(/\/(start|strat|help)/i, (msg) => {
     }
 });
 
-// Handling Keyboard Buttons & Text Messages
+// Messages Handler
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
     if (!text || text.startsWith('/')) return;
 
-    // Authentication Check
     if (!authenticatedUsers.has(chatId) && msg.from.id !== ADMIN_ID) {
         if (text === currentPassword) {
             authenticatedUsers.add(chatId);
@@ -163,7 +157,6 @@ bot.on('message', async (msg) => {
         }
     }
 
-    // Main Keyboard Menu Handlers
     if (text === "🔢 Pair via Code") {
         userStates[chatId] = "WAITING_FOR_LINK_NUMBER";
         return bot.sendMessage(chatId, "📲 Apnar WhatsApp number-ti din (Country code সহ, e.g. `8801700000000`):", { parse_mode: "Markdown" });
@@ -186,29 +179,35 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, `ℹ️ **Bot Status:** ${isConnected}`, { reply_markup: getMainReplyKeyboard() });
     }
 
-    // Input States Handling
     const state = userStates[chatId];
 
     if (state === "WAITING_FOR_LINK_NUMBER") {
         delete userStates[chatId];
         const phone = text.replace(/[^0-9]/g, '');
 
-        bot.sendMessage(chatId, "⏳ Fresh session clean kore pairing code generate kora hocche...");
+        bot.sendMessage(chatId, "⏳ Fresh connection establish kora hocche...");
 
         try {
+            // Force reset session to prevent old auth lock
             const waSock = await getUserSocket(chatId, true);
-            await new Promise((res) => setTimeout(res, 3000));
+            
+            // Wait for WebSocket handshake to stabilize
+            await new Promise((res) => setTimeout(res, 5000));
 
-            let code = await waSock.requestPairingCode(phone);
-            code = code?.match(/.{1,4}/g)?.join("-") || code;
+            if (!waSock.authState.creds.registered) {
+                let code = await waSock.requestPairingCode(phone);
+                code = code?.match(/.{1,4}/g)?.join("-") || code;
 
-            bot.sendMessage(chatId, `🔑 **Pairing Code:** \`${code}\`\n\n👉 Apnar Phone-er **WhatsApp > Linked Devices > Link with Phone Number Instead**-e giye eii code-ti boshiye din!`, {
-                parse_mode: "Markdown",
-                reply_markup: getMainReplyKeyboard()
-            });
+                bot.sendMessage(chatId, `🔑 **Pairing Code:** \`${code}\`\n\n👉 Apnar Phone-er **WhatsApp > Linked Devices > Link with Phone Number Instead**-e giye eii code-ti fast boshiye din!`, {
+                    parse_mode: "Markdown",
+                    reply_markup: getMainReplyKeyboard()
+                });
+            } else {
+                bot.sendMessage(chatId, "✅ Already Connected!", { reply_markup: getMainReplyKeyboard() });
+            }
         } catch (err) {
             console.error("Pairing Code Error:", err);
-            bot.sendMessage(chatId, "❌ Code generate fail hoyeche. Doya kore abar **🔢 Pair via Code** button-e chap din.", { reply_markup: getMainReplyKeyboard() });
+            bot.sendMessage(chatId, "❌ Code fail hoyeche. Doya kore abar **🔢 Pair via Code** try korun.", { reply_markup: getMainReplyKeyboard() });
         }
 
     } else if (state === "WAITING_FOR_CHECK_NUMBER") {
@@ -242,4 +241,4 @@ bot.on('message', async (msg) => {
         }
     }
 });
-            
+                
