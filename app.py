@@ -65,7 +65,7 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0")) if os.environ.get("ADMIN_ID") el
 SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "telegram")
 OTP_GROUP_ID = os.environ.get("OTP_GROUP_ID", "")
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "telegram_canada_otp_bot") # Separate database setup
+MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "telegram_canada_otp_bot")
 
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}/"
 
@@ -107,7 +107,6 @@ def init_settings():
         settings_col.insert_one({"key": "bot_status", "value": "ON"})
 
 def migrate_money_fields_to_decimal128():
-    """Normalize legacy float money fields into exact MongoDB Decimal128."""
     try:
         for u in users_col.find({}, {"_id": 1, "balance": 1, "total_recharge": 1}):
             updates = {}
@@ -406,7 +405,6 @@ def get_back_keyboard():
     kb = [[{"text": "⬅️ Back", "style": "danger"}]]
     return {"keyboard": kb, "resize_keyboard": True}
 
-# Helper for Admin Panel Main Text & Markup
 def get_admin_panel_data():
     bot_active = (get_bot_status() == "ON")
     current_price = get_number_price()
@@ -443,7 +441,6 @@ def get_admin_panel_data():
     }
     return msg, markup
 
-# Render Daily Stats Page for Admin
 def render_daily_stats_page(page=1, items_per_page=10):
     users = list(users_col.find())
     total_users = len(users)
@@ -489,7 +486,6 @@ def render_daily_stats_page(page=1, items_per_page=10):
 
     return stats_msg, {"inline_keyboard": nav_buttons}
 
-# Core Update Handler
 def handle_update(update):
     try:
         msg_data = update.get("message") or update.get("callback_query", {}).get("message")
@@ -511,7 +507,6 @@ def handle_update(update):
             current_price = get_number_price()
             bot_active = (get_bot_status() == "ON")
 
-            # Admin Reply Handler for VPN Orders
             if is_admin and "reply_to_message" in msg:
                 reply_msg = msg["reply_to_message"]
                 reply_text = reply_msg.get("text", "")
@@ -528,18 +523,15 @@ def handle_update(update):
                         send_message(chat_id, f"✅ <b>Order notification successfully sent to User {target_u_id}!</b>")
                         return
 
-            # Handle Back Button Globally
             if text in ["⬅️ Back", "🔙 Back"]:
                 delete_user_state(user_id)
                 send_message(chat_id, "<b>মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
                 return
 
-            # Check Bot OFF Status for Normal Users
             if not is_admin and not bot_active:
                 send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b>\nআপনারা একটু ধৈর্য ধরুন, এরপর জানিয়ে দেওয়া হবে। আপাতত কেউ ডিপোজিট বা নম্বর ক্রয় করবেন না। 🛑")
                 return
 
-            # Force Join Verification Guard
             if not is_admin:
                 is_joined, missing = verify_force_join(user_id)
                 if not is_joined:
@@ -564,10 +556,8 @@ def handle_update(update):
                     )
                     return
 
-            # Input State Handling from Database
             state_data = get_user_state(user_id)
             if state_data:
-                # Set VPN / IP Prices
                 if is_admin and state_data in ["ADMIN_SET_NORD_PRICE", "ADMIN_SET_DATAMA_PRICE"]:
                     service = "nord" if state_data == "ADMIN_SET_NORD_PRICE" else "datama"
                     service_name = "NordVPN" if service == "nord" else "DatamaPlus IP"
@@ -580,7 +570,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                # Admin Upload VPN Stock File
                 if is_admin and isinstance(state_data, dict) and state_data.get("step") == "ADMIN_UPLOAD_VPN_FILE":
                     service = state_data.get("service")
                     service_name = "NordVPN" if service == "nord" else "DatamaPlus IP"
@@ -611,7 +600,6 @@ def handle_update(update):
                         send_message(chat_id, "❌ <b>অনুগ্রহ করে একটি সঠিক টেক্সট (.txt / .csv) ফাইল আপলোড করুন।</b>", reply_markup=get_back_keyboard())
                         return
 
-                # Multiple Number Quantity Input
                 if isinstance(state_data, str) and state_data == "BUY_MULTI_QTY":
                     try:
                         qty = int(text.strip())
@@ -704,7 +692,6 @@ def handle_update(update):
                         send_message(chat_id, "❌ <b>ভুল ইনপুট!</b> কেবল পূর্ণসংখ্যা লিখুন (যেমন: 2, 5, 10)।")
                         return
 
-                # Change Canada Number Price
                 if is_admin and state_data == "ADMIN_SET_PRICE":
                     try:
                         price_text = text.strip()
@@ -718,7 +705,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                # Admin Custom Direct Add Balance State
                 if is_admin and state_data == "ADMIN_DIRECT_ADD_BAL":
                     try:
                         parts = text.split()
@@ -737,7 +723,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                # Dynamic Force Join Set
                 if is_admin and state_data == "ADMIN_SET_CHANNELS":
                     ch_list = [c.strip() for c in text.split(",") if c.strip()]
                     if len(ch_list) > 2:
@@ -748,7 +733,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                # Deposit Binance Step 1: Amount
                 if isinstance(state_data, dict) and state_data.get("step") == "WAITING_AMOUNT":
                     try:
                         amount = float(text)
@@ -771,7 +755,6 @@ def handle_update(update):
                         send_message(chat_id, "❌ <b>ভুল ইনপুট!</b> কেবল সংখ্যা লিখুন। (যেমন: 5 বা 10)")
                         return
 
-                # Deposit Step 2: TrxID
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_TRX":
                     set_user_state(user_id, {
                         "step": "WAITING_SCREENSHOT",
@@ -781,7 +764,6 @@ def handle_update(update):
                     send_message(chat_id, "📸 <b>ধন্যবাদ! এবার পেমেন্টের একটি স্পষ্ট স্ক্রিনশট (Photo) পাঠান:</b>", reply_markup=get_back_keyboard())
                     return
 
-                # Deposit Step 3: Screenshot
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_SCREENSHOT":
                     if "photo" in msg:
                         photo_file_id = msg["photo"][-1]["file_id"]
@@ -816,7 +798,6 @@ def handle_update(update):
                         send_message(chat_id, "❌ <b>অনুগ্রহ করে পেমেন্টের একটি ছবি/স্ক্রিনশট পাঠান।</b>", reply_markup=get_back_keyboard())
                         return
 
-                # Admin File Upload Number Stock
                 elif is_admin and state_data == "ADMIN_UPLOAD_FILE":
                     if "document" in msg:
                         doc = msg["document"]
@@ -847,7 +828,6 @@ def handle_update(update):
                         send_message(chat_id, "❌ <b>অনুগ্রহ করে একটি সঠিক টেক্সট (.txt / .csv) ফাইল আপলোড করুন।</b>", reply_markup=get_back_keyboard())
                         return
 
-                # Admin Custom Deposit Input
                 elif isinstance(state_data, str) and state_data.startswith("ADMIN_APPROVE_AMOUNT_"):
                     target_user = int(state_data.replace("ADMIN_APPROVE_AMOUNT_", ""))
                     try:
@@ -860,7 +840,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                # Admin Broadcast
                 elif isinstance(state_data, str) and state_data == "ADMIN_BROADCAST":
                     all_users = get_all_users()
                     success, failed = 0, 0
@@ -878,7 +857,6 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-            # Main Keyboards Handling
             if text == "/start":
                 welcome_text = f"👋 <b>Welcome {html.escape(first_name)}!</b>\n\nনিচের মেনু থেকে সার্ভিস সিলেক্ট করুন:"
                 send_message(chat_id, welcome_text, reply_markup=get_main_keyboard(is_admin))
@@ -961,7 +939,6 @@ def handle_update(update):
             if data == "noop":
                 return
 
-            # VPN Buy Callbacks
             if data.startswith("buy_vpn_"):
                 service = "nord" if "nord" in data else "datama"
                 service_title = "NordVPN" if service == "nord" else "DatamaPlus IP"
@@ -1014,7 +991,6 @@ def handle_update(update):
                 edit_message(chat_id, message_id, "❌ <b>অর্ডারটি বাতিল করা হয়েছে।</b>")
                 return
 
-            # Bot Status Toggle Callback
             if data == "admin_toggle_bot_off" and is_admin:
                 set_bot_status("OFF")
                 admin_msg, admin_markup = get_admin_panel_data()
@@ -1092,7 +1068,7 @@ def handle_update(update):
                 order = get_order_by_phone(phone)
                 
                 if order:
-                    link = order[2]
+                    link = order[2] # এটি ডাটাবেজে সেভ করা ওই নির্দিষ্ট নম্বরের নিজস্ব আলাদা লিংক
                     otp_code = None
                     raw_response_text = ""
                     
@@ -1103,17 +1079,15 @@ def handle_update(update):
                             "Cache-Control": "no-cache"
                         }
 
-                        api_link = link.replace("/sms/", "/api/sms/") if "/sms/" in link else link
-                        response = requests.get(api_link, headers=headers, timeout=8)
+                        # সরাসরি নির্দিষ্ট নম্বরের নিজস্ব লিংকে হিট করা হচ্ছে
+                        response = requests.get(link, headers=headers, timeout=8)
                         api_text = response.text.strip()
                         raw_response_text = api_text
 
                         if re.match(r'^\d{3,10}$', api_text):
                             otp_code = api_text
                         else:
-                            main_res = requests.get(link, headers=headers, timeout=8)
-                            raw_response_text = main_res.text
-                            matches = re.findall(r'\b\d{6}\b', main_res.text)
+                            matches = re.findall(r'\b\d{6}\b', response.text)
                             clean_phone = re.sub(r'\D', '', phone)
                             
                             for code in matches:
@@ -1155,7 +1129,6 @@ def handle_update(update):
                     else:
                         send_message(chat_id, "⌛ <b>OTP এখনও আসেনি!</b> অনুগ্রহ করে কিছুক্ষণ পর আবার Check OTP চাপুন।")
 
-            # Admin Navigation Callbacks
             elif data == "admin_panel_back" and is_admin:
                 admin_msg, admin_markup = get_admin_panel_data()
                 edit_message(chat_id, message_id, admin_msg, reply_markup=admin_markup)
@@ -1216,7 +1189,7 @@ def handle_update(update):
 
             elif data == "admin_upload_file" and is_admin:
                 set_user_state(user_id, "ADMIN_UPLOAD_FILE")
-                send_message(chat_id, "📁 <b>Canada নম্বর সম্বলিত ফাইলটি (.txt / .csv) এখানে পাঠাও:</b>\nফরম্যাট:\n<code>+1234567890, https://otp-link.com/check</code>", reply_markup=get_back_keyboard())
+                send_message(chat_id, "📁 <b>Canada নম্বর সম্বলিত ফাইলটি (.txt / .csv) এখানে পাঠাও:</b>\nফরম্যাট:\n<code>+1234567890, https://sms.elitetrick.com/record/index.php?key=...</code>", reply_markup=get_back_keyboard())
 
             elif data == "admin_view_stock" and is_admin:
                 stock_items = get_all_stock()
@@ -1279,13 +1252,13 @@ if __name__ == "__main__":
 
     print("🚀 Canada OTP Bot Engine Online...")
     offset = 0
-    while True:
+    while `True`:
         try:
             res = requests.get(BASE_URL + "getUpdates", params={"offset": offset, "timeout": 20}, timeout=25).json()
             if res.get("ok"):
                 for update in res.get("result", []):
                     offset = update["update_id"] + 1
-                    threading.Thread(target=safe_execution_wrapper, args=(update,), daemon=True).start()
+                    threading.Thread(target=safe_execution_wrapper, args=(update,), daemon=True).setDaemon(True) # Fixed daemon attribute warning
         except Exception as e:
             print(f"Polling Network Recovering... {e}")
             time.sleep(3)
