@@ -101,16 +101,10 @@ def init_settings():
         settings_col.insert_one({"key": "nord_price", "value": "1.00"})
     if not settings_col.find_one({"key": "datama_price"}):
         settings_col.insert_one({"key": "datama_price", "value": "1.00"})
-    if not settings_col.find_one({"key": "bdt_per_usd"}):
-        settings_col.insert_one({"key": "bdt_per_usd", "value": "120.0"})
     if not settings_col.find_one({"key": "force_channels"}):
         settings_col.insert_one({"key": "force_channels", "channels": []})
     if not settings_col.find_one({"key": "bot_status"}):
         settings_col.insert_one({"key": "bot_status", "value": "ON"})
-    if not settings_col.find_one({"key": "rex_checker_link"}):
-        settings_col.insert_one({"key": "rex_checker_link", "value": "https://t.me/rex_checker_bot"})
-    if not settings_col.find_one({"key": "google_sheet_url"}):
-        settings_col.insert_one({"key": "google_sheet_url", "value": ""})
 
 def migrate_money_fields_to_decimal128():
     """Normalize legacy float money fields into exact MongoDB Decimal128."""
@@ -153,185 +147,6 @@ def get_bot_status():
 
 def set_bot_status(status):
     settings_col.update_one({"key": "bot_status"}, {"$set": {"value": status}}, upsert=True)
-
-def get_rex_checker_link():
-    doc = settings_col.find_one({"key": "rex_checker_link"})
-    return doc["value"] if doc else "https://t.me/rex_checker_bot"
-
-def set_rex_checker_link(link):
-    settings_col.update_one({"key": "rex_checker_link"}, {"$set": {"value": link}}, upsert=True)
-
-def get_google_sheet_url():
-    doc = settings_col.find_one({"key": "google_sheet_url"})
-    return doc["value"] if doc else ""
-
-def set_google_sheet_url(url):
-    settings_col.update_one({"key": "google_sheet_url"}, {"$set": {"value": url}}, upsert=True)
-
-def _post_google_sheet(payload, retries=3):
-    sheet_url = get_google_sheet_url()
-    if not sheet_url:
-        return None
-
-    last_error = None
-    for attempt in range(retries):
-        try:
-            response = requests.post(sheet_url, json=payload, timeout=30)
-            try:
-                result = response.json()
-            except Exception:
-                result = None
-
-            if response.ok and isinstance(result, dict) and result.get("ok") is True:
-                return result
-
-            last_error = f"HTTP {response.status_code}; body={result if result is not None else response.text[:300]}"
-        except Exception as e:
-            last_error = str(e)
-
-        if attempt < retries - 1:
-            time.sleep(1.5 * (attempt + 1))
-
-    print(f"Google Sheet POST failed after {retries} attempts: {last_error}")
-    return None
-
-def _mark_order_synced(order_ids):
-    ids = [oid for oid in order_ids if oid is not None]
-    if not ids:
-        return
-    try:
-        orders_col.update_many(
-            {"_id": {"$in": ids}},
-            {"$set": {"google_sheet_synced": True}}
-        )
-    except Exception as e:
-        print(f"Google Sheet Sync Flag Error: {e}")
-
-def log_purchase_to_google_sheet(user_id, username, phone, otp_link, purchase_date, otp_code=None, order_id=None):
-    if not get_google_sheet_url():
-        return False
-
-    payload = {
-        "action": "batch_purchase",
-        "records": [{
-            "order_id": str(order_id) if order_id is not None else "",
-            "user_id": str(user_id),
-            "username": str(username or "NoUsername"),
-            "phone": str(phone or ""),
-            "otp": str(otp_code) if otp_code else "",
-            "otp_link": str(otp_link or ""),
-            "date": str(purchase_date or "")
-        }]
-    }
-
-    result = _post_google_sheet(payload, retries=3)
-    if not result:
-        return False
-
-    synced_ids = set(result.get("synced_order_ids", []))
-    if order_id is not None and str(order_id) in synced_ids:
-        _mark_order_synced([order_id])
-        gid = result.get("gids", {}).get(str(user_id))
-        if gid:
-            users_col.update_one(
-                {"user_id": user_id},
-                {"$set": {"google_sheet_gid": str(gid)}},
-                upsert=False
-            )
-        return True
-
-    if order_id is None and result.get("processed", 0) >= 1:
-        return True
-    return False
-
-def background_log_purchase(user_id, username, phone, link, purchase_date, order_id):
-    try:
-        log_purchase_to_google_sheet(
-            user_id, username, phone, link, purchase_date, order_id=order_id
-        )
-    except Exception as e:
-        print(f"Background Google Sheet purchase log skipped: {e}")
-
-def update_purchase_otp_in_google_sheet(user_id, phone, otp_code, order_id=None):
-    if not get_google_sheet_url() or not otp_code:
-        return False
-    payload = {
-        "action": "otp_update",
-        "user_id": str(user_id),
-        "phone": str(phone),
-        "otp": str(otp_code),
-        "order_id": str(order_id) if order_id is not None else ""
-    }
-    return bool(_post_google_sheet(payload, retries=3))
-
-def sync_all_existing_orders_to_google_sheet():
-    if not get_google_sheet_url():
-        return 0, 0
-
-    success, failed = 0, 0
-    batch = []
-    BATCH_SIZE = 20
-
-    def flush_batch(items):
-        nonlocal success, failed
-        if not items:
-            return
-
-        sheet_items = [{k: v for k, v in item.items() if k != "_mongo_id_obj"} for item in items]
-        payload = {"action": "batch_purchase", "records": sheet_items}
-        result = _post_google_sheet(payload, retries=5)
-        if not result:
-            failed += len(items)
-            return
-
-        synced_ids = {str(x) for x in result.get("synced_order_ids", [])}
-        order_map = {str(x["_mongo_id"]): x["_mongo_id_obj"] for x in items}
-        confirmed = [order_map[x] for x in synced_ids if x in order_map]
-        _mark_order_synced(confirmed)
-        success += len(confirmed)
-        failed += len(items) - len(confirmed)
-
-        gids = result.get("gids", {})
-        for uid, gid in gids.items():
-            try:
-                users_col.update_one(
-                    {"user_id": int(uid) if str(uid).lstrip("-").isdigit() else uid},
-                    {"$set": {"google_sheet_gid": str(gid)}}
-                )
-            except Exception:
-                pass
-
-    try:
-        cursor = orders_col.find({"google_sheet_synced": {"$ne": True}}).sort("_id", 1)
-        for row in cursor:
-            user_id = row.get("user_id")
-            u = users_col.find_one({"user_id": user_id}, {"username": 1})
-            username = u.get("username", "NoUsername") if u else "NoUsername"
-            oid = row.get("_id")
-            oid_str = str(oid) if oid is not None else ""
-
-            batch.append({
-                "_mongo_id": oid_str,
-                "_mongo_id_obj": oid,
-                "order_id": oid_str,
-                "user_id": str(user_id),
-                "username": str(username or "NoUsername"),
-                "phone": str(row.get("phone_number", "") or ""),
-                "otp": str(row.get("otp_code")) if row.get("otp_code") else "",
-                "otp_link": str(row.get("otp_link", "") or ""),
-                "date": str(row.get("purchase_date", "") or "")
-            })
-
-            if len(batch) >= BATCH_SIZE:
-                flush_batch(batch)
-                batch = []
-
-        flush_batch(batch)
-        return success, failed
-    except Exception as e:
-        print(f"Google Sheet History Sync Error: {e}")
-        failed += len(batch)
-        return success, failed
 
 def to_decimal(value):
     try:
@@ -377,13 +192,6 @@ def get_vpn_price(service):
 def set_vpn_price(service, new_price):
     key = "nord_price" if service == "nord" else "datama_price"
     settings_col.update_one({"key": key}, {"$set": {"value": str(new_price)}}, upsert=True)
-
-def get_bdt_per_usd():
-    doc = settings_col.find_one({"key": "bdt_per_usd"})
-    return float(doc["value"]) if doc else 120.0
-
-def set_bdt_per_usd(new_rate):
-    settings_col.update_one({"key": "bdt_per_usd"}, {"$set": {"value": str(new_rate)}}, upsert=True)
 
 def get_force_channels():
     doc = settings_col.find_one({"key": "force_channels"})
@@ -447,24 +255,6 @@ def update_balance(user_id, amount_usd):
         }}
     )
 
-def add_refund_balance(user_id, amount_usd, num_count=0):
-    amount = to_decimal(amount_usd)
-    users_col.update_one(
-        {"user_id": user_id},
-        {"$inc": {"balance": Decimal128(amount)}}
-    )
-    u = get_user(user_id)
-    username = u[1] if u else "NoUsername"
-    now_str = datetime.now().strftime("%d-%b-%Y %I:%M %p")
-    refund_logs_col.insert_one({
-        "user_id": user_id,
-        "username": username,
-        "amount": Decimal128(amount),
-        "num_count": num_count,
-        "date": now_str,
-        "timestamp": datetime.now()
-    })
-
 def deduct_balance(user_id, amount_usd):
     amount = to_decimal(amount_usd)
     result = users_col.update_one(
@@ -499,8 +289,7 @@ def save_active_order(user_id, phone, link):
         "app_type": None,
         "lang": None,
         "purchase_date": now_str,
-        "created_at": datetime.now(),
-        "google_sheet_synced": False
+        "created_at": datetime.now()
     })
     return result.inserted_id
 
@@ -513,13 +302,6 @@ def update_order_otp(phone, otp_code, app_type="WA", lang="EN"):
         {"_id": latest_order["_id"]},
         {"$set": {"otp_code": otp_code, "app_type": app_type, "lang": lang}}
     )
-    if otp_code:
-        update_purchase_otp_in_google_sheet(
-            latest_order.get("user_id"),
-            phone,
-            otp_code,
-            order_id=latest_order.get("_id")
-        )
 
 def get_user_orders_all(user_id):
     rows = list(orders_col.find({"user_id": user_id}).sort("_id", -1))
@@ -613,7 +395,6 @@ def get_main_keyboard(is_admin=False):
             {"text": "👤 PROFILE", "style": "primary"}
         ],
         [
-            {"text": "🔍 Rex Checker", "style": "primary"},
             {"text": "🎧 SUPPORT", "style": "primary"}
         ]
     ]
@@ -626,25 +407,13 @@ def get_back_keyboard():
     return {"keyboard": kb, "resize_keyboard": True}
 
 # Helper for Admin Panel Main Text & Markup
-def get_google_sheet_sync_status():
-    try:
-        return orders_col.count_documents({"google_sheet_synced": {"$ne": True}})
-    except Exception as e:
-        print(f"Google Sheet Sync Status Error: {e}")
-        return -1
-
 def get_admin_panel_data():
     bot_active = (get_bot_status() == "ON")
     current_price = get_number_price()
     nord_pr = get_vpn_price("nord")
     datama_pr = get_vpn_price("datama")
-    bdt_rate = get_bdt_per_usd()
     chans = get_force_channels()
     chan_str = ", ".join(chans) if chans else "None"
-    rex_link = get_rex_checker_link()
-    sheet_url = get_google_sheet_url() or "Not Set"
-    sync_pending = get_google_sheet_sync_status()
-    sync_str = "Not Set" if not get_google_sheet_url() else (f"⚠️ {sync_pending} Pending" if sync_pending > 0 else "✅ All Synced")
     status_str = "🟢 ONLINE" if bot_active else "🔴 OFF / MAINTENANCE"
     
     msg = (
@@ -652,9 +421,6 @@ def get_admin_panel_data():
         f"🤖 <b>Bot Status:</b> {status_str}\n"
         f"🇨🇦 <b>Canada WhatsApp Price:</b> ${format_number_price(current_price)} USD\n"
         f"🛡️ <b>NordVPN Price:</b> ${nord_pr:.2f} USD | <b>DatamaPlus IP Price:</b> ${datama_pr:.2f} USD\n"
-        f"🔍 <b>Rex Checker Link:</b> {rex_link}\n"
-        f"📊 <b>Google Sheet Webhook URL:</b> {sheet_url}\n"
-        f"🔄 <b>Google Sheet Sync:</b> {sync_str}\n"
         f"📢 <b>Force Channels (Max 2):</b> {chan_str}"
     )
     
@@ -667,9 +433,6 @@ def get_admin_panel_data():
             [{"text": "➕ ADD BALANCE", "callback_data": "admin_direct_add_balance", "style": "success"}],
             [{"text": "🏷️ Change Canada WhatsApp Price", "callback_data": "admin_set_rate", "style": "primary"}],
             [{"text": "🛡️ Set NordVPN Price", "callback_data": "admin_set_nord_price", "style": "primary"}, {"text": "🌐 Set DatamaPlus IP Price", "callback_data": "admin_set_datama_price", "style": "primary"}],
-            [{"text": "🔍 Set Rex Checker Link", "callback_data": "admin_set_rex_link", "style": "primary"}],
-            [{"text": "📊 Set Google Sheet URL", "callback_data": "admin_set_sheet_url", "style": "success"}],
-            [{"text": "🔄 Google Sheet Sync / Retry", "callback_data": "admin_sheet_sync", "style": "success"}],
             [{"text": "📁 Upload VPN / IP Stock File", "callback_data": "admin_upload_vpn_file", "style": "success"}],
             [{"text": "📢 Dynamic Force Join (2 Channels)", "callback_data": "admin_set_channels", "style": "success"}],
             [{"text": "📢 Broadcast Message", "callback_data": "admin_broadcast", "style": "primary"}],
@@ -804,30 +567,6 @@ def handle_update(update):
             # Input State Handling from Database
             state_data = get_user_state(user_id)
             if state_data:
-                # Set Rex Checker Link
-                if is_admin and state_data == "ADMIN_SET_REX_LINK":
-                    set_rex_checker_link(text.strip())
-                    send_message(chat_id, f"✅ <b>Rex Checker Link updated successfully:</b>\n{text.strip()}", reply_markup=get_main_keyboard(is_admin))
-                    delete_user_state(user_id)
-                    return
-
-                # Set Google Sheet URL
-                if is_admin and state_data == "ADMIN_SET_SHEET_URL":
-                    sheet_url = text.strip()
-                    if not (sheet_url.startswith("https://") or sheet_url.startswith("http://")):
-                        send_message(chat_id, "❌ <b>সঠিক Google Apps Script Web App URL দিন।</b>\nউদাহরণ: https://script.google.com/macros/s/.../exec")
-                        return
-                    set_google_sheet_url(sheet_url)
-                    send_message(chat_id, "⏳ <b>Google Sheet সংযোগ করা হয়েছে। পুরোনো MongoDB purchase history sync করা হচ্ছে...</b>")
-                    synced, failed = sync_all_existing_orders_to_google_sheet()
-                    send_message(
-                        chat_id,
-                        f"✅ <b>Google Sheet URL saved.</b>\n\n📥 পুরোনো history sync: <b>{synced}</b>\n❌ ব্যর্থ: <b>{failed}</b>\n\nএখন থেকে নতুন purchase ও OTP-ও sheet-এ save হবে।",
-                        reply_markup=get_main_keyboard(is_admin)
-                    )
-                    delete_user_state(user_id)
-                    return
-
                 # Set VPN / IP Prices
                 if is_admin and state_data in ["ADMIN_SET_NORD_PRICE", "ADMIN_SET_DATAMA_PRICE"]:
                     service = "nord" if state_data == "ADMIN_SET_NORD_PRICE" else "datama"
@@ -956,14 +695,6 @@ def handle_update(update):
                             delete_user_state(user_id)
                             send_message(chat_id, "⚠️ <b>পেমেন্ট প্রসেস করতে সমস্যা হয়েছে।</b>")
                             return
-
-                        now_for_log = datetime.now().strftime("%d-%b-%Y %I:%M %p")
-                        for p, l, oid in purchased_list:
-                            threading.Thread(
-                                target=background_log_purchase,
-                                args=(user_id, username, p, l, now_for_log, oid),
-                                daemon=True
-                            ).start()
 
                         delete_user_state(user_id)
                         send_message(chat_id, "<b>মূল মেনু:</b>", reply_markup=get_main_keyboard(is_admin))
@@ -1198,19 +929,6 @@ def handle_update(update):
                 )
                 send_message(chat_id, prof_text, reply_markup=get_back_keyboard())
 
-            elif text == "🔍 Rex Checker":
-                rex_link = get_rex_checker_link()
-                rex_markup = {
-                    "inline_keyboard": [
-                        [{"text": "🔍 Open Rex Checker", "url": rex_link}]
-                    ]
-                }
-                send_message(
-                    chat_id,
-                    "🔍 <b>Rex Checker</b>\n\nনিচের বাটনে চাপ দিয়ে Rex Checker ওপেন করুন:",
-                    reply_markup=rex_markup
-                )
-
             elif text == "🎧 SUPPORT":
                 send_message(chat_id, f"<b>যেকোনো সাহায্যে যোগাযোগ করুন:</b>\n👉 @{SUPPORT_USERNAME}", reply_markup=get_back_keyboard())
 
@@ -1367,13 +1085,6 @@ def handle_update(update):
                     edit_message(chat_id, message_id, "⚠️ <b>পেমেন্ট প্রসেস করতে সমস্যা হয়েছে।</b>")
                     return
 
-                p_date = datetime.now().strftime("%d-%b-%Y %I:%M %p")
-                threading.Thread(
-                    target=background_log_purchase,
-                    args=(user_id, username, phone, link, p_date, order_id),
-                    daemon=True
-                ).start()
-
                 send_message(chat_id, "<b>মূল মেনু:</b>", reply_markup=get_main_keyboard(is_admin))
 
             elif data.startswith("chk_otp_"):
@@ -1463,33 +1174,6 @@ def handle_update(update):
                     "উদাহরণ: <code>123456789 5.00</code>",
                     reply_markup=get_back_keyboard()
                 )
-
-            elif data == "admin_set_rex_link" and is_admin:
-                set_user_state(user_id, "ADMIN_SET_REX_LINK")
-                send_message(chat_id, "🔍 <b>Rex Checker-এর নতুন লিংকটি লিখে পাঠান:</b>", reply_markup=get_back_keyboard())
-
-            elif data == "admin_sheet_sync" and is_admin:
-                if not get_google_sheet_url():
-                    edit_message(chat_id, message_id, "❌ <b>Google Sheet URL সেট করা নেই।</b>", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "admin_panel_back"}]]})
-                else:
-                    pending_before = get_google_sheet_sync_status()
-                    edit_message(chat_id, message_id, f"⏳ <b>Google Sheet Sync চলছে...</b>\nPending records: {pending_before}")
-                    success, failed = sync_all_existing_orders_to_google_sheet()
-                    pending_after = get_google_sheet_sync_status()
-                    result_text = (
-                        "🔄 <b>Google Sheet Sync সম্পন্ন!</b>\n\n"
-                        f"✅ Saved/Confirmed: <b>{success}</b>\n"
-                        f"❌ Failed: <b>{failed}</b>\n"
-                        f"📌 এখনও Pending: <b>{max(pending_after, 0)}</b>"
-                    )
-                    edit_message(chat_id, message_id, result_text, reply_markup={"inline_keyboard": [
-                        [{"text": "🔄 Retry Again", "callback_data": "admin_sheet_sync", "style": "success"}],
-                        [{"text": "⬅️ Back to Admin Panel", "callback_data": "admin_panel_back", "style": "danger"}]
-                    ]})
-
-            elif data == "admin_set_sheet_url" and is_admin:
-                set_user_state(user_id, "ADMIN_SET_SHEET_URL")
-                send_message(chat_id, "📊 <b>Google Sheet Webhook / Apps Script URL টি লিখে পাঠান:</b>", reply_markup=get_back_keyboard())
 
             elif data == "admin_set_nord_price" and is_admin:
                 set_user_state(user_id, "ADMIN_SET_NORD_PRICE")
