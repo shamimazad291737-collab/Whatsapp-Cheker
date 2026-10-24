@@ -1068,7 +1068,7 @@ def handle_update(update):
                 order = get_order_by_phone(phone)
                 
                 if order:
-                    link = order[2] # এটি ডাটাবেজে সেভ করা ওই নির্দিষ্ট নম্বরের নিজস্ব আলাদা লিংক
+                    link = order[2] # নির্দিষ্ট নম্বরের নিজস্ব ইউনিক লিংক
                     otp_code = None
                     raw_response_text = ""
                     
@@ -1079,7 +1079,7 @@ def handle_update(update):
                             "Cache-Control": "no-cache"
                         }
 
-                        # সরাসরি নির্দিষ্ট নম্বরের নিজস্ব লিংকে হিট করা হচ্ছে
+                        # নির্দিষ্ট নম্বরের লিংকে রিকোয়েস্ট পাঠানো হচ্ছে
                         response = requests.get(link, headers=headers, timeout=8)
                         api_text = response.text.strip()
                         raw_response_text = api_text
@@ -1252,13 +1252,14 @@ if __name__ == "__main__":
 
     print("🚀 Canada OTP Bot Engine Online...")
     offset = 0
-    while `True`:
+    while True:
         try:
             res = requests.get(BASE_URL + "getUpdates", params={"offset": offset, "timeout": 20}, timeout=25).json()
             if res.get("ok"):
                 for update in res.get("result", []):
                     offset = update["update_id"] + 1
-                    threading.Thread(target=safe_execution_wrapper, args=(update,), daemon=True).setDaemon(True) # Fixed daemon attribute warning
+                    # Python-এর আধুনিক থ্রেডিং স্ট্যান্ডার্ড অনুযায়ী daemon=True ব্যবহার করা হয়েছে
+                    threading.Thread(target=safe_execution_wrapper, args=(update,), daemon=True).start()
         except Exception as e:
             print(f"Polling Network Recovering... {e}")
             time.sleep(3)
