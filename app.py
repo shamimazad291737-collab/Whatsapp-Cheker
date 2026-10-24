@@ -1080,14 +1080,19 @@ def handle_update(update):
                         }
 
                         # নির্দিষ্ট নম্বরের লিংকে রিকোয়েস্ট পাঠানো হচ্ছে
-                        response = requests.get(link, headers=headers, timeout=8)
-                        api_text = response.text.strip()
-                        raw_response_text = api_text
+                        response = requests.get(link, headers=headers, timeout=10)
+                        raw_response_text = response.text.strip()
 
-                        if re.match(r'^\d{3,10}$', api_text):
-                            otp_code = api_text
+                        # HTML ট্যাগগুলো রিমুভ করা হচ্ছে
+                        clean_text = re.sub(r'<[^>]+>', ' ', raw_response_text)
+
+                        # হাইফেনযুক্ত বা সাধারণ ওটিপি কোড (যেমন: 309-979 বা 309979) খোঁজার প্যাটার্ন
+                        match_code = re.search(r'\b(\d{3,4})[-]?(\d{3,4})\b', clean_text)
+                        
+                        if match_code:
+                            otp_code = "".join(match_code.groups())
                         else:
-                            matches = re.findall(r'\b\d{6}\b', response.text)
+                            matches = re.findall(r'\b\d{6}\b', clean_text)
                             clean_phone = re.sub(r'\D', '', phone)
                             
                             for code in matches:
@@ -1258,7 +1263,6 @@ if __name__ == "__main__":
             if res.get("ok"):
                 for update in res.get("result", []):
                     offset = update["update_id"] + 1
-                    # Python-এর আধুনিক থ্রেডিং স্ট্যান্ডার্ড অনুযায়ী daemon=True ব্যবহার করা হয়েছে
                     threading.Thread(target=safe_execution_wrapper, args=(update,), daemon=True).start()
         except Exception as e:
             print(f"Polling Network Recovering... {e}")
