@@ -234,7 +234,6 @@ def get_force_channels():
     return doc.get("channels", []) if doc else []
 
 def set_force_channels(channels_list):
-    # Completely overwrite old list with the new list
     settings_col.update_one({"key": "force_channels"}, {"$set": {"channels": channels_list}}, upsert=True)
 
 def get_all_users():
@@ -404,7 +403,6 @@ def get_chat_invite_link(chat_input):
     except Exception as e:
         print(f"Get invite link error: {e}")
     
-    # Fallback to direct username or link format if API fails to retrieve invite link
     if "t.me/" in channel_input:
         return channel_input if channel_input.startswith("http") else "https://" + channel_input
     clean_ch = channel_input.strip().replace("@", "")
@@ -524,6 +522,11 @@ def handle_update(update):
             current_price = get_number_price()
             bot_active = (get_bot_status() == "ON")
 
+            if text in ["⬅️ 𝗕𝗮𝗰𝗸", "🔙 𝗕𝗮𝗰𝗸"]:
+                delete_user_state(user_id)
+                send_message(chat_id, "<b>🏠 মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
+                return
+
             if is_admin and "reply_to_message" in msg:
                 reply_text = msg["reply_to_message"].get("text", "")
                 if "VPN / IP ORDER #" in reply_text:
@@ -532,11 +535,6 @@ def handle_update(update):
                         send_message(int(user_match.group(1)), f"🎉 <b>আপনার অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!</b>\n\n<b>বিবরণ:</b>\n<code>{text.strip()}</code>")
                         send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>অর্ডার ডিটেইলস সফলভাবে ইউজারের কাছে পাঠানো হয়েছে!</b>")
                         return
-
-            if text in ["⬅️ 𝗕𝗮𝗰𝗸", "🔙 𝗕𝗮𝗰𝗸"]:
-                delete_user_state(user_id)
-                send_message(chat_id, "<b>🏠 মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
-                return
 
             if not is_admin and not bot_active:
                 send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন।")
@@ -614,8 +612,7 @@ def handle_update(update):
                     try:
                         qty = int(text.strip())
                         if qty <= 0 or qty > 20:
-                            send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>সর্বোচ্চ ২০টি এবং কমপক্ষে ১টি নম্বর কিনতে পারবেন।</b>")
-                            delete_user_state(user_id)
+                            send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>সর্বোচ্চ ২০টি এবং কমপক্ষে ১টি নম্বর কিনতে পারবেন।</b>", reply_markup={"inline_keyboard": [[{"text": "❌ Cancel", "callback_data": "cancel_multi_buy"}]]})
                             return
 
                         total_cost = current_price * Decimal(qty)
@@ -623,14 +620,12 @@ def handle_update(update):
                         bal = u_info[2] if u_info else 0.0
 
                         if to_decimal(bal) < total_cost:
-                            send_message(chat_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b> প্রয়োজন: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(total_cost)} USD")
-                            delete_user_state(user_id)
+                            send_message(chat_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b> প্রয়োজন: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(total_cost)} USD", reply_markup={"inline_keyboard": [[{"text": "❌ Cancel", "callback_data": "cancel_multi_buy"}]]})
                             return
 
                         stock_items = get_all_stock()
                         if len(stock_items) < qty:
-                            send_message(chat_id, f"⚠️ <b>স্টকে পর্যাপ্ত নম্বর নেই!</b> বর্তমানে খালি আছে: {len(stock_items)} টি")
-                            delete_user_state(user_id)
+                            send_message(chat_id, f"⚠️ <b>স্টকে পর্যাপ্ত নম্বর নেই!</b> বর্তমানে খালি আছে: {len(stock_items)} টি", reply_markup={"inline_keyboard": [[{"text": "❌ Cancel", "callback_data": "cancel_multi_buy"}]]})
                             return
 
                         purchased_list = []
@@ -654,7 +649,7 @@ def handle_update(update):
                         send_message(chat_id, "<b>🏠 মূল মেনু:</b>", reply_markup=get_main_keyboard(is_admin))
                         return
                     except ValueError:
-                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক সংখ্যা লিখুন।")
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক সংখ্যা লিখুন।", reply_markup={"inline_keyboard": [[{"text": "❌ Cancel", "callback_data": "cancel_multi_buy"}]]})
                         return
 
                 if is_admin and state_data == "ADMIN_SET_PRICE":
@@ -811,7 +806,7 @@ def handle_update(update):
                 markup = {
                     "inline_keyboard": [
                         [{"text": f"🛡️ NordVPN (${get_vpn_price('nord'):.2f})", "callback_data": "buy_vpn_nord", "style": "primary"}],
-                        [{"text": f"🌐 DatamaPlus IP (${get_vpn_price('datama'):.2f})", "callback_data": "buy_vpn_datama", "style": "primary"}]
+                        [{"text": "🌐 DatamaPlus IP (${get_vpn_price('datama'):.2f})", "callback_data": "buy_vpn_datama", "style": "primary"}]
                     ]
                 }
                 send_message(chat_id, f"<tg-emoji emoji-id=\"5420155432272438703\">🛡️</tg-emoji> <b>VPN & IP Service Options:</b>\n\nপছন্দের সার্ভিসটি সিলেক্ট করুন:", reply_markup=markup)
@@ -844,6 +839,12 @@ def handle_update(update):
             current_price = get_number_price()
 
             if data == "noop": return
+
+            if data == "cancel_multi_buy":
+                delete_user_state(user_id)
+                edit_message(chat_id, message_id, "❌ <b>মাল্টিপল বাই প্রসেস বাতিল করা হয়েছে।</b>", reply_markup=None)
+                send_message(chat_id, "<b>🏠 মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
+                return
 
             if data.startswith("buy_vpn_"):
                 service = "nord" if "nord" in data else "datama"
@@ -898,9 +899,10 @@ def handle_update(update):
 
             elif data == "buy_multi_num":
                 set_user_state(user_id, "BUY_MULTI_QTY")
-                edit_message(chat_id, message_id, "🔢 <b>একসাথে কতগুলো নম্বর কিনতে চান সংখ্যা লিখে পাঠান:</b>\n(যেমন: 2, 5, 10)", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_buy_menu"}]]})
+                edit_message(chat_id, message_id, "🔢 <b>একসাথে কতগুলো নম্বর কিনতে চান সংখ্যা লিখে পাঠান:</b>\n(যেমন: 2, 5, 10)", reply_markup={"inline_keyboard": [[{"text": "❌ Cancel", "callback_data": "cancel_multi_buy"}], [{"text": "⬅️ Back", "callback_data": "back_to_buy_menu"}]]})
 
             elif data == "back_to_buy_menu":
+                delete_user_state(user_id)
                 markup = {
                     "inline_keyboard": [
                         [{"text": f"🇨🇦 𝗖𝗔𝗡𝗔𝗗𝗔 𝗪𝗦 (${format_money_exact(current_price)})", "callback_data": "confirm_buy_canada", "style": "success"}],
