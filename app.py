@@ -362,13 +362,17 @@ def check_channel_member(user_id, channel_input):
             path = ch.split("t.me/")[-1].replace("/", "")
             ch = path if (path.startswith("+") or path.startswith("joinchat")) else "@" + path
         elif not ch.startswith("@") and not ch.startswith("-100"):
-            ch = "@" + ch
+            # If it's a numeric ID or chat ID without -100 prefix for supergroups
+            if ch.lstrip("-").isdigit():
+                ch = "-100" + ch if not ch.startswith("-100") else ch
+            else:
+                ch = "@" + ch
 
         res = requests.post(BASE_URL + "getChatMember", json={"chat_id": ch, "user_id": user_id}, timeout=5).json()
         if res.get("ok"):
             return res["result"]["status"] in ["creator", "administrator", "member"]
     except Exception as e:
-        print(f"Check channel error: {e}")
+        print(f"Check channel/group error: {e}")
     return False
 
 def verify_force_join(user_id):
@@ -417,7 +421,7 @@ def get_admin_panel_data():
         f"🤖 <b>বট স্ট্যাটাস:</b> {status_str}\n"
         f"<tg-emoji emoji-id=\"5397916757333654639\">🇨🇦</tg-emoji> <b>কানাডা নম্বর বিক্রয় মূল্য:</b> <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(current_price)} USD\n"
         f"<tg-emoji emoji-id=\"5420155432272438703\">🛡️</tg-emoji> <b>NordVPN মূল্য:</b> <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{nord_pr:.2f} USD | <b>DatamaPlus IP:</b> <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{datama_pr:.2f} USD\n"
-        f"📢 <b>ফোর্স জয়েন চ্যানেল:</b> {chan_str}\n\n"
+        f"📢 <b>ফোর্স জয়েন চ্যানেল/গ্রুপ:</b> {chan_str}\n\n"
         f"📈 <tg-emoji emoji-id=\"5264713049637409446\">📊</tg-emoji> <b>আজকের লাইভ পরিসংখ্যান ({get_today_date_str()}):</b>\n"
         f"<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> <b>মোট ডিপোজিট:</b> ${format_money_exact(today_stats['total_deposit'])} USDT\n"
         f"🛒 <b>নম্বর বিক্রয় হয়েছে:</b> {today_stats['total_sold']} টি\n"
@@ -435,7 +439,7 @@ def get_admin_panel_data():
             [{"text": "➕ 𝗔𝗗𝗗 𝗕𝗔𝗟𝗔𝗡𝗖𝗘", "callback_data": "admin_direct_add_balance", "style": "success"}],
             [{"text": "🏷️ 𝗖𝗵𝗮𝗻𝗴𝗲 𝗖𝗮𝗻𝗮𝗱𝗮 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_rate", "style": "primary"}],
             [{"text": "🛡️ 𝗦𝗲𝘁 𝗡𝗼𝗿𝗱 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_nord_price", "style": "primary"}, {"text": "🌐 𝗦𝗲𝘁 𝗗𝗮𝘁𝗮𝗺𝗮 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_datama_price", "style": "primary"}],
-            [{"text": "📁 𝗨𝗽𝗹𝗼𝗮𝗱 𝗩𝗣𝗡 𝗦𝘁𝗼𝗰𝗸", "callback_data": "admin_upload_vpn_file", "style": "success"}, {"text": "📢 𝗙𝗼𝗿𝗰𝗲 𝗝𝗼𝗶𝗻", "callback_data": "admin_set_channels", "style": "success"}],
+            [{"text": "📁 𝗨𝗽𝗹𝗼𝗮𝗱 𝗩𝗣𝗡 𝗦𝘁𝗼𝗰𝗸", "callback_data": "admin_upload_vpn_file", "style": "success"}, {"text": "📢 𝗙𝗼𝗿𝗰𝗲 𝗝𝗼𝗶𝗻 (Group/Channel)", "callback_data": "admin_set_channels", "style": "success"}],
             [{"text": "📢 𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 𝗠𝗲𝘀𝘀𝗮𝗴𝗲", "callback_data": "admin_broadcast", "style": "primary"}, {"text": "📁 𝗨𝗽𝗹𝗼𝗮𝗱 𝗡𝘂𝗺𝗯𝗲𝗿𝘀", "callback_data": "admin_upload_file", "style": "success"}],
             [{"text": "📊 𝗩𝗶𝗲𝘄 𝗦𝘁𝗼𝗰𝗸", "callback_data": "admin_view_stock", "style": "primary"}, {"text": "🗑️ 𝗖𝗹𝗲𝗮𝗿 𝗦𝘁𝗼𝗰𝗸", "callback_data": "admin_delete_stock_confirm", "style": "danger"}]
         ]
@@ -513,9 +517,9 @@ def handle_update(update):
             if not is_admin:
                 is_joined, missing = verify_force_join(user_id)
                 if not is_joined:
-                    buttons = [[{"text": f"📢 Join Channel {i+1}", "url": f"https://t.me/{ch.strip().replace('@','')}"}] for i, ch in enumerate(missing)]
+                    buttons = [[{"text": f"📢 Join Group/Channel {i+1}", "url": f"https://t.me/{ch.strip().replace('@','')}"}] if not ch.startswith("-100") else [{"text": f"📢 Join Group {i+1}", "url": "https://t.me/"}] for i, ch in enumerate(missing)]
                     buttons.append([{"text": "🔄 𝗩𝗲𝗿𝗶𝗳𝘆 𝗝𝗼𝗶𝗻", "callback_data": "verify_join"}])
-                    send_message(chat_id, "⚠️ <b>বটটি ব্যবহার করতে নিচের চ্যানেলগুলোতে অবশ্যই জয়েন করুন:</b>", reply_markup={"inline_keyboard": buttons})
+                    send_message(chat_id, "⚠️ <b>বটটি ব্যবহার করতে নিচের গ্রুপ বা চ্যানেলগুলোতে অবশ্যই জয়েন করুন:</b>", reply_markup={"inline_keyboard": buttons})
                     return
 
             state_data = get_user_state(user_id)
@@ -662,7 +666,7 @@ def handle_update(update):
                 if is_admin and state_data == "ADMIN_SET_CHANNELS":
                     channels = [ch.strip() for ch in text.split(",") if ch.strip()]
                     set_force_channels(channels)
-                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>ফোর্স জয়েন চ্যানেল সেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>ফোর্স জয়েন চ্যানেল বা গ্রুপ সেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     delete_user_state(user_id)
                     return
 
@@ -859,7 +863,7 @@ def handle_update(update):
                 if verify_force_join(user_id)[0]:
                     send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>ভেরিফিকেশন সফল হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                 else:
-                    send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>দয়া করে সবকটি চ্যানেলে জয়েন করুন।</b>")
+                    send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>দয়া করে সবকটি চ্যানেল বা গ্রুপে জয়েন করুন।</b>")
 
             elif data == "buy_multi_num":
                 set_user_state(user_id, "BUY_MULTI_QTY")
@@ -902,22 +906,32 @@ def handle_update(update):
                 phone = data.replace("chk_otp_", "")
                 order = get_order_by_phone(phone)
                 if order:
-                    try:
-                        resp = requests.get(order[2], headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                        clean = re.sub(r'<[^>]+>', ' ', resp.text)
-                        m = re.search(r'\b(\d{3,4})[-]?(\d{3,4})\b', clean)
-                        otp = "".join(m.groups()) if m else None
-                        if otp:
-                            update_order_otp(phone, otp)
-                            app_type = "WB" if ("business" in resp.text.lower() or "smb" in resp.text.lower()) else "WA"
-                            send_message(chat_id, f"🔑 <tg-emoji emoji-id=\"5193063022226086560\">🔑</tg-emoji> <b>OTP Code ({app_type}):</b> <code>{otp}</code>")
-                            if OTP_GROUP_ID:
-                                masked_num = mask_phone_number(phone)
-                                send_message(OTP_GROUP_ID, f"🎉 <tg-emoji emoji-id=\"5337267511261960341\">🔥</tg-emoji> <b>New OTP Received! ({app_type})</b>\n\n📱 <tg-emoji emoji-id=\"5397916757333654639\">🇨🇦</tg-emoji> <b>Number:</b> <code>{masked_num}</code>\n🔑 <tg-emoji emoji-id=\"5193063022226086560\">🔑</tg-emoji> <b>OTP Code:</b> <code>{otp}</code>")
-                        else:
-                            send_message(chat_id, "⌛ <b>OTP এখনো আসেনি! কিছুক্ষণ পর আবার চেষ্টা করুন।</b>")
-                    except Exception:
-                        send_message(chat_id, "⚠️ <b>OTP ফেচ করতে সমস্যা হয়েছে।</b>")
+                    send_message(chat_id, f"⏳ <b>OTP এর জন্য অপেক্ষা করা হচ্ছে (১ মিনিট লাইভ চেকিং)...</b>\n📱 <code>{phone}</code>")
+                    
+                    def live_check_otp(target_chat_id, target_phone, target_link):
+                        start_time = time.time()
+                        # Run for 60 seconds, checking every 5 seconds (12 attempts)
+                        while time.time() - start_time < 60:
+                            try:
+                                resp = requests.get(target_link, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                                clean = re.sub(r'<[^>]+>', ' ', resp.text)
+                                m = re.search(r'\b(\d{3,4})[-]?(\d{3,4})\b', clean)
+                                otp = "".join(m.groups()) if m else None
+                                if otp:
+                                    update_order_otp(target_phone, otp)
+                                    app_type = "WB" if ("business" in resp.text.lower() or "smb" in resp.text.lower()) else "WA"
+                                    send_message(target_chat_id, f"🎉 <tg-emoji emoji-id=\"5193063022226086560\">🔑</tg-emoji> <b>সফলভাবে OTP পাওয়া গেছে! ({app_type})</b>\n📱 নম্বর: <code>{target_phone}</code>\n🔑 <b>OTP Code:</b> <code>{otp}</code>")
+                                    if OTP_GROUP_ID:
+                                        masked_num = mask_phone_number(target_phone)
+                                        send_message(OTP_GROUP_ID, f"🔥 <b>New OTP Received! ({app_type})</b>\n📱 <b>Number:</b> <code>{masked_num}</code>\n🔑 <b>OTP Code:</b> <code>{otp}</code>")
+                                    return
+                            except Exception:
+                                pass
+                            time.sleep(5)
+                        
+                        send_message(target_chat_id, f"⌛ <b>সময় শেষ!</b> নম্বর <code>{target_phone}</code> এর জন্য নির্ধারিত ১ মিনিটের মধ্যে কোনো OTP আসেনি। দয়া করে কিছুক্ষণ পর আবার চেক করুন।")
+
+                    threading.Thread(target=live_check_otp, args=(chat_id, phone, order[2]), daemon=True).start()
 
             elif data == "admin_view_history" and is_admin:
                 stats_cursor = daily_stats_col.find().sort("date", -1).limit(7)
@@ -960,7 +974,7 @@ def handle_update(update):
 
             elif data == "admin_set_channels" and is_admin:
                 set_user_state(user_id, "ADMIN_SET_CHANNELS")
-                send_message(chat_id, "📢 চ্যানেল ইউজারনেম দিন (একাধিক হলে কমা দিয়ে লিখুন যেমন: @channel1, @channel2):", reply_markup=get_back_keyboard())
+                send_message(chat_id, "📢 চ্যানেল ইউজারনেম বা গ্রুপ Chat ID দিন (একাধিক হলে কমা দিয়ে লিখুন যেমন: @channel1, -100123456789):", reply_markup=get_back_keyboard())
 
             elif data == "admin_upload_vpn_file" and is_admin:
                 set_user_state(user_id, "ADMIN_UPLOAD_VPN_FILE")
