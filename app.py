@@ -9,6 +9,17 @@ from flask import Flask
 from pymongo import MongoClient
 from decimal import Decimal, InvalidOperation
 from bson.decimal128 import Decimal128
+import os
+import requests
+import html
+import threading
+import time
+import re
+from datetime import datetime, timedelta
+from flask import Flask
+from pymongo import MongoClient
+from decimal import Decimal, InvalidOperation
+from bson.decimal128 import Decimal128
 
 # Language Detector Function with expanded shortcodes mapping & fix
 def detect_language(text):
@@ -625,13 +636,23 @@ def handle_update(update):
                     lines = text.split("\n")
                     count = 0
                     for line in lines:
-                        if "," in line:
-                            parts = line.split(",", 1)
-                            phone = parts.strip()
-                            link = parts.strip()
-                            if phone and link:
-                                add_stock_item(phone, link)
-                                count += 1
+                        line_clean = line.strip()
+                        if not line_clean:
+                            continue
+                        # Skip header if present
+                        if "Phone Number" in line_clean or "Direct Link" in line_clean:
+                            continue
+                        
+                        # Handle CSV format with or without quotes: "number","link",...
+                        if "," in line_clean:
+                            parts = [p.strip().strip('"').strip("'") for p in line_clean.split(",")]
+                            if len(parts) >= 2:
+                                phone = parts
+                                link = parts
+                                if phone and link and phone.startswith("+"):
+                                    add_stock_item(phone, link)
+                                    count += 1
+
                     send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> সফলভাবে <b>{count}</b> টি নম্বর স্টক করা হয়েছে!", reply_markup=get_main_keyboard(is_admin))
                     delete_user_state(user_id)
                     return
