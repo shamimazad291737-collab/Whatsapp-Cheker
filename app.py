@@ -811,19 +811,23 @@ def handle_update(update):
 
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_SCREENSHOT":
                     if "photo" in msg:
+                        # ডাবল সাবমিশন বা ডুপ্লিকেট রোধ করতে আগেই স্টেট রিমুভ করা হলো
+                        current_amt = state_data["amount"]
+                        current_trx = state_data["trx_id"]
+                        delete_user_state(user_id)
+
                         photo_id = msg["photo"][-1]["file_id"]
-                        amt = state_data["amount"]
                         admin_markup = {
                             "inline_keyboard": [
-                                [{"text": f"✅ Approve (${amt})", "callback_data": f"appusd_{user_id}_{amt}", "style": "success"}],
+                                [{"text": f"✅ Approve (${current_amt})", "callback_data": f"appusd_{user_id}_{current_amt}", "style": "success"}],
                                 [{"text": "❌ Reject", "callback_data": f"dep_rej_{user_id}", "style": "danger"}]
                             ]
                         }
                         for aid in ADMIN_IDS:
                             if aid != 0:
-                                send_photo_to_admin(aid, photo_id, f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n👤 @{username} (<code>{user_id}</code>)\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> {amt} USDT\nTrxID: <code>{state_data['trx_id']}</code>", reply_markup=admin_markup)
+                                send_photo_to_admin(aid, photo_id, f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n👤 @{username} (<code>{user_id}</code>)\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> {current_amt} USDT\nTrxID: <code>{current_trx}</code>", reply_markup=admin_markup)
+                        
                         send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>আপনার ডিপোজিট তথ্য অ্যাডমিনের কাছে পাঠানো হয়েছে!</b> যাচাই করে ব্যালেন্স যোগ করা হবে।", reply_markup=get_main_keyboard(is_admin))
-                        delete_user_state(user_id)
                         return
                     else:
                         send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> অনুগ্রহ করে পেমেন্টের একটি স্ক্রিনশট ছবি পাঠান।", reply_markup=get_back_keyboard())
@@ -1123,7 +1127,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Balance Deduct/Minus Feature...")
+    print("🚀 Canada OTP Bot Engine Online with Duplicate Prevention & Balance Deduct...")
     offset = 0
     while True:
         try:
