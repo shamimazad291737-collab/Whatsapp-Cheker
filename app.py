@@ -59,9 +59,11 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Environment Variables
+# Environment Variables & Multi-Admin Support
 TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "0")) if os.environ.get("ADMIN_ID") else 0
+admin_env = os.environ.get("ADMIN_ID", "0")
+ADMIN_IDS = [int(aid.strip()) for aid in admin_env.split(",") if aid.strip().isdigit()] if admin_env else [0]
+
 SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "telegram")
 OTP_GROUP_ID = os.environ.get("OTP_GROUP_ID", "")
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
@@ -82,6 +84,9 @@ settings_col = db["settings"]
 user_states_col = db["user_states"]
 refund_logs_col = db["refund_logs"]
 daily_stats_col = db["daily_stats"]
+
+def is_user_admin(user_id):
+    return user_id in ADMIN_IDS
 
 # Helper functions for MongoDB User States
 def get_user_state(user_id):
@@ -483,7 +488,7 @@ def handle_update(update):
             text = msg.get("text", "")
 
             add_user(user_id, username)
-            is_admin = (user_id == ADMIN_ID)
+            is_admin = is_user_admin(user_id)
             current_price = get_number_price()
             bot_active = (get_bot_status() == "ON")
 
@@ -502,7 +507,7 @@ def handle_update(update):
                 return
 
             if not is_admin and not bot_active:
-                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন።")
+                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন।")
                 return
 
             if not is_admin:
@@ -522,6 +527,16 @@ def handle_update(update):
                         send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>মূল্য সফলভাবে আপডেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     except ValueError:
                         send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক সংখ্যা লিখুন।")
+                    delete_user_state(user_id)
+                    return
+
+                if is_admin and isinstance(state_data, str) and state_data.startswith("ADMIN_SET_PRICE_CUSTOM"):
+                    service = "nord" if "nord" in state_data else "datama"
+                    try:
+                        set_vpn_price(service, float(text.strip()))
+                        send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>{service.upper()}VPN মূল্য আপডেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                    except ValueError:
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক পরিমাণ লিখুন।")
                     delete_user_state(user_id)
                     return
 
@@ -592,6 +607,43 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
+                if is_admin and state_data == "ADMIN_SET_CHANNELS":
+                    channels = [ch.strip() for ch in text.split(",") if ch.strip()]
+                    set_force_channels(channels)
+                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>ফোর্স জয়েন চ্যানেল সেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                    delete_user_state(user_id)
+                    return
+
+                if is_admin and state_data == "ADMIN_UPLOAD_FILE":
+                    lines = text.split("\n")
+                    count = 0
+                    for line in lines:
+                        if "," in line:
+                            parts = line.split(",", 1)
+                            phone = parts.strip()
+                            link = parts.strip()
+                            if phone and link:
+                                add_stock_item(phone, link)
+                                count += 1
+                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> সফলভাবে <b>{count}</b> টি নম্বর স্টক করা হয়েছে!", reply_markup=get_main_keyboard(is_admin))
+                    delete_user_state(user_id)
+                    return
+
+                if is_admin and state_data == "ADMIN_UPLOAD_VPN_FILE":
+                    lines = text.split("\n")
+                    count = 0
+                    for line in lines:
+                        if "|" in line:
+                            parts = line.split("|", 1)
+                            srv = parts.strip().lower()
+                            acc = parts.strip()
+                            if srv in ["nord", "datama"] and acc:
+                                add_vpn_stock_item(srv, acc)
+                                count += 1
+                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> সফলভাবে <b>{count}</b> টি VPN অ্যাকাউন্ট যোগ করা হয়েছে!", reply_markup=get_main_keyboard(is_admin))
+                    delete_user_state(user_id)
+                    return
+
                 if isinstance(state_data, dict) and state_data.get("step") == "WAITING_AMOUNT":
                     try:
                         amount = float(text)
@@ -618,7 +670,9 @@ def handle_update(update):
                                 [{"text": "❌ Reject", "callback_data": f"dep_rej_{user_id}", "style": "danger"}]
                             ]
                         }
-                        send_photo_to_admin(ADMIN_ID, photo_id, f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n👤 @{username} (<code>{user_id}</code>)\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> {amt} USDT\nTrxID: <code>{state_data['trx_id']}</code>", reply_markup=admin_markup)
+                        for aid in ADMIN_IDS:
+                            if aid != 0:
+                                send_photo_to_admin(aid, photo_id, f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n👤 @{username} (<code>{user_id}</code>)\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> {amt} USDT\nTrxID: <code>{state_data['trx_id']}</code>", reply_markup=admin_markup)
                         send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>আপনার ডিপোজিট তথ্য অ্যাডমিনের কাছে পাঠানো হয়েছে!</b> যাচাই করে ব্যালেন্স যোগ করা হবে।", reply_markup=get_main_keyboard(is_admin))
                         delete_user_state(user_id)
                         return
@@ -673,7 +727,7 @@ def handle_update(update):
         elif "callback_query" in update:
             cb = update["callback_query"]
             cb_id, chat_id, message_id, user_id, data = cb["id"], cb["message"]["chat"]["id"], cb["message"]["message_id"], cb["from"]["id"], cb.get("data", "")
-            is_admin = (user_id == ADMIN_ID)
+            is_admin = is_user_admin(user_id)
 
             try: requests.post(BASE_URL + "answerCallbackQuery", json={"callback_query_id": cb_id}, timeout=5)
             except: pass
@@ -717,7 +771,9 @@ def handle_update(update):
 
                 deduct_balance(user_id, pr)
                 order_id = save_vpn_order(user_id, service, pr)
-                send_message(ADMIN_ID, f"🚨 <b>NEW VPN / IP ORDER #{order_id}</b>\n\n👤 User ID: <code>{user_id}</code>\n🛡️ Service: {service_title}\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> Price: ${pr:.2f} USD\n\n👉 <i>এই মেসেজে Reply দিয়ে অ্যাকাউন্ট তথ্য পাঠান।</i>")
+                for aid in ADMIN_IDS:
+                    if aid != 0:
+                        send_message(aid, f"🚨 <b>NEW VPN / IP ORDER #{order_id}</b>\n\n👤 User ID: <code>{user_id}</code>\n🛡️ Service: {service_title}\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> Price: ${pr:.2f} USD\n\n👉 <i>এই মেসেজে Reply দিয়ে অ্যাকাউন্ট তথ্য পাঠান।</i>")
                 edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>আপনার {service_title} অর্ডারটি সফলভাবে কনফার্ম হয়েছে!</b>\n\n ফি কাটা হয়েছে: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${pr:.2f} USD\n⏳ অল্প সময়ের মধ্যে অ্যাডমিন ডেলিভারি দিয়ে দেবেন।")
                 return
 
@@ -819,13 +875,39 @@ def handle_update(update):
                 set_user_state(user_id, "ADMIN_SET_PRICE")
                 send_message(chat_id, "🏷️ নতুন মূল্য লিখে পাঠান:", reply_markup=get_back_keyboard())
 
+            elif data == "admin_set_nord_price" and is_admin:
+                set_user_state(user_id, "ADMIN_SET_PRICE_CUSTOM_nord")
+                send_message(chat_id, "🛡️ NordVPN এর নতুন মূল্য লিখে পাঠান:", reply_markup=get_back_keyboard())
+
+            elif data == "admin_set_datama_price" and is_admin:
+                set_user_state(user_id, "ADMIN_SET_PRICE_CUSTOM_datama")
+                send_message(chat_id, "🌐 DatamaPlus এর নতুন মূল্য লিখে পাঠান:", reply_markup=get_back_keyboard())
+
+            elif data == "admin_set_channels" and is_admin:
+                set_user_state(user_id, "ADMIN_SET_CHANNELS")
+                send_message(chat_id, "📢 চ্যানেল ইউজারনেম দিন (একাধিক হলে কমা দিয়ে লিখুন যেমন: @channel1, @channel2):", reply_markup=get_back_keyboard())
+
+            elif data == "admin_upload_vpn_file" and is_admin:
+                set_user_state(user_id, "ADMIN_UPLOAD_VPN_FILE")
+                send_message(chat_id, "📁 VPN স্টক টেক্সট আকারে পাঠান (Format: <code>nord | account_info</code> বা <code>datama | account_info</code>)", reply_markup=get_back_keyboard())
+
+            elif data == "admin_toggle_bot_off" and is_admin:
+                set_bot_status("OFF")
+                msg_txt, markup = get_admin_panel_data()
+                edit_message(chat_id, message_id, msg_txt, reply_markup=markup)
+
+            elif data == "admin_toggle_bot_on" and is_admin:
+                set_bot_status("ON")
+                msg_txt, markup = get_admin_panel_data()
+                edit_message(chat_id, message_id, msg_txt, reply_markup=markup)
+
             elif data == "admin_broadcast" and is_admin:
                 set_user_state(user_id, "ADMIN_BROADCAST")
                 send_message(chat_id, "📢 ব্রডকাস্ট মেসেজটি লিখে পাঠান:", reply_markup=get_back_keyboard())
 
             elif data == "admin_upload_file" and is_admin:
                 set_user_state(user_id, "ADMIN_UPLOAD_FILE")
-                send_message(chat_id, "📁 .txt ফাইল আপলোড করুন (format: <code>+number, link</code>)", reply_markup=get_back_keyboard())
+                send_message(chat_id, "📁 নম্বর স্টক টেক্সট আকারে পাঠান (format: <code>+number, link</code> প্রতি লাইনে একটি)", reply_markup=get_back_keyboard())
 
             elif data == "admin_view_stock" and is_admin:
                 items = get_all_stock()
@@ -840,7 +922,7 @@ def handle_update(update):
 
             elif data.startswith("appusd_") and is_admin:
                 parts = data.split("_")
-                u_id, amt = int(parts[1]), float(parts[2])
+                u_id, amt = int(parts), float(parts)
                 update_balance(u_id, amt)
                 record_deposit_stat(amt)
                 send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>Balance credited & recorded!</b>")
@@ -856,7 +938,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Custom Premium Emojis...")
+    print("🚀 Canada OTP Bot Engine Online with Multi-Admin & Fixed Panel Controls...")
     offset = 0
     while True:
         try:
