@@ -125,9 +125,10 @@ def migrate_money_fields_to_decimal128():
 init_settings()
 migrate_money_fields_to_decimal128()
 
+# Binance Pay ID
 BINANCE_PAY_ID = "907194603"
 
-# Helper Functions & Daily Statistics Trackers (Deposit & Profit with Midnight Reset)
+# Daily Statistics Trackers (Deposit & Profit with Midnight Reset)
 def get_today_date_str():
     return datetime.now().strftime("%Y-%m-%d")
 
@@ -408,18 +409,18 @@ def get_admin_panel_data():
     
     msg = (
         "<b>⚙️ 𝗔𝗗𝗠𝗜𝗡 𝗣𝗔𝗡𝗘𝗟</b>\n\n"
-        f"🤖 <b>Bot Status:</b> {status_str}\n"
-        f"🇨🇦 <b>Canada Number Sell Price:</b> ${format_money_exact(current_price)} USD\n"
-        f"🛡️ <b>NordVPN Price:</b> ${nord_pr:.2f} USD | <b>DatamaPlus IP:</b> ${datama_pr:.2f} USD\n"
-        f"📢 <b>Force Channels:</b> {chan_str}\n\n"
-        f"📈 <b>TODAY'S LIVE STATS ({get_today_date_str()}):</b>\n"
-        f"💵 <b>Total Deposit:</b> ${format_money_exact(today_stats['total_deposit'])} USDT\n"
-        f"🛒 <b>Numbers Sold:</b> {today_stats['total_sold']} Pcs\n"
-        f"💰 <b>Total Revenue:</b> ${format_money_exact(today_stats['total_revenue'])} USD\n"
-        f"🔥 <b>Net Profit:</b> ${format_money_exact(today_stats['total_profit'])} USD\n"
+        f"🤖 <b>বট স্ট্যাটাস:</b> {status_str}\n"
+        f"🇨🇦 <b>কানাডা নম্বর বিক্রয় মূল্য:</b> ${format_money_exact(current_price)} USD\n"
+        f"🛡️ <b>NordVPN মূল্য:</b> ${nord_pr:.2f} USD | <b>DatamaPlus IP:</b> ${datama_pr:.2f} USD\n"
+        f"📢 <b>ফোর্স জয়েন চ্যানেল:</b> {chan_str}\n\n"
+        f"📈 <b>আজকের লাইভ পরিসংখ্যান ({get_today_date_str()}):</b>\n"
+        f"💵 <b>মোট ডিপোজিট:</b> ${format_money_exact(today_stats['total_deposit'])} USDT\n"
+        f"🛒 <b>নম্বর বিক্রয় হয়েছে:</b> {today_stats['total_sold']} টি\n"
+        f"💰 <b>মোট রেভিনিউ:</b> ${format_money_exact(today_stats['total_revenue'])} USD\n"
+        f"🔥 <b>নেট প্রফিট:</b> ${format_money_exact(today_stats['total_profit'])} USD\n"
     )
     
-    toggle_btn = {"text": "🔴 Turn OFF Bot", "callback_data": "admin_toggle_bot_off", "style": "danger"} if bot_active else {"text": "🟢 Turn ON Bot", "callback_data": "admin_toggle_bot_on", "style": "success"}
+    toggle_btn = {"text": "🔴 বট বন্ধ করুন", "callback_data": "admin_toggle_bot_off", "style": "danger"} if bot_active else {"text": "🟢 বট চালু করুন", "callback_data": "admin_toggle_bot_on", "style": "success"}
 
     markup = {
         "inline_keyboard": [
@@ -454,7 +455,7 @@ def render_daily_stats_page(page=1, items_per_page=10):
         uname = u.get("username", "NoUsername")
         bal = format_money_exact(u.get("balance", 0.0))
         user_orders = get_user_orders_all(uid)
-        stats_msg += f"<b>{idx}. @{uname}</b> (<code>{uid}</code>)\n   💰 <b>Bal:</b> ${bal} | 🛒 <b>Bought:</b> {len(user_orders)}\n\n"
+        stats_msg += f"<b>{idx}. @{uname}</b> (<code>{uid}</code>)\n   💰 <b>ব্যালেন্স:</b> ${bal} | 🛒 <b>ক্রয়:</b> {len(user_orders)} টি\n\n"
 
     nav_buttons = []
     if total_pages > 1:
@@ -491,17 +492,17 @@ def handle_update(update):
                 if "VPN / IP ORDER #" in reply_text:
                     user_match = re.search(r'User ID: (\d+)', reply_text)
                     if user_match:
-                        send_message(int(user_match.group(1)), f"🎉 <b>Your order is completed!</b>\n\n<b>Details:</b>\n<code>{text.strip()}</code>")
-                        send_message(chat_id, f"✅ <b>Order details sent to user!</b>")
+                        send_message(int(user_match.group(1)), f"🎉 <b>আপনার অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!</b>\n\n<b>বিবরণ:</b>\n<code>{text.strip()}</code>")
+                        send_message(chat_id, f"✅ <b>অর্ডার ডিটেইলস সফলভাবে ইউজারের কাছে পাঠানো হয়েছে!</b>")
                         return
 
             if text in ["⬅️ 𝗕𝗮𝗰𝗸", "🔙 𝗕𝗮𝗰𝗸"]:
                 delete_user_state(user_id)
-                send_message(chat_id, "<b>মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
+                send_message(chat_id, "<b>🏠 মূল মেনুতে ফিরে আসা হয়েছে:</b>", reply_markup=get_main_keyboard(is_admin))
                 return
 
             if not is_admin and not bot_active:
-                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে অপেক্ষা করুন।")
+                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন।")
                 return
 
             if not is_admin:
@@ -509,7 +510,7 @@ def handle_update(update):
                 if not is_joined:
                     buttons = [[{"text": f"📢 Join Channel {i+1}", "url": f"https://t.me/{ch.strip().replace('@','')}"}] for i, ch in enumerate(missing)]
                     buttons.append([{"text": "🔄 𝗩𝗲𝗿𝗶𝗳𝘆 𝗝𝗼𝗶𝗻", "callback_data": "verify_join"}])
-                    send_message(chat_id, "⚠️ <b>বটটি ব্যবহার করতে নিচের চ্যানেলগুলোতে জয়েন করুন:</b>", reply_markup={"inline_keyboard": buttons})
+                    send_message(chat_id, "⚠️ <b>বটটি ব্যবহার করতে নিচের চ্যানেলগুলোতে অবশ্যই জয়েন করুন:</b>", reply_markup={"inline_keyboard": buttons})
                     return
 
             state_data = get_user_state(user_id)
@@ -518,9 +519,9 @@ def handle_update(update):
                     service = "nord" if "NORD" in state_data else "datama"
                     try:
                         set_vpn_price(service, float(text))
-                        send_message(chat_id, f"✅ <b>Price updated successfully!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(chat_id, f"✅ <b>মূল্য সফলভাবে আপডেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     except ValueError:
-                        send_message(chat_id, "❌ Invalid number format.")
+                        send_message(chat_id, "❌ সঠিক সংখ্যা লিখুন।")
                     delete_user_state(user_id)
                     return
 
@@ -543,7 +544,7 @@ def handle_update(update):
 
                         stock_items = get_all_stock()
                         if len(stock_items) < qty:
-                            send_message(chat_id, f"⚠️ <b>স্টকে পর্যাপ্ত নম্বর নেই!</b> বর্তমানে আছে: {len(stock_items)} টি")
+                            send_message(chat_id, f"⚠️ <b>স্টকে পর্যাপ্ত নম্বর নেই!</b> বর্তমানে খালি আছে: {len(stock_items)} টি")
                             delete_user_state(user_id)
                             return
 
@@ -556,7 +557,7 @@ def handle_update(update):
                         deduct_balance(user_id, total_cost)
                         record_sale_stat(qty, current_price, get_cost_price())
 
-                        res_msg = f"✅ <b>Successfully Bought {len(purchased_list)} Numbers!</b>\n\n"
+                        res_msg = f"✅ <b>সফলভাবে {len(purchased_list)} টি নম্বর কেনা হয়েছে!</b>\n\n"
                         multi_btns = []
                         for idx, (p, l, oid) in enumerate(purchased_list, 1):
                             res_msg += f"<b>{idx}.</b> 📱 <code>{p}</code> | 🔗 {l}\n"
@@ -565,7 +566,7 @@ def handle_update(update):
 
                         send_message(chat_id, res_msg, reply_markup={"inline_keyboard": multi_btns})
                         delete_user_state(user_id)
-                        send_message(chat_id, "<b>মূল মেনু:</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(chat_id, "<b>🏠 মূল মেনু:</b>", reply_markup=get_main_keyboard(is_admin))
                         return
                     except ValueError:
                         send_message(chat_id, "❌ সঠিক সংখ্যা লিখুন।")
@@ -574,9 +575,9 @@ def handle_update(update):
                 if is_admin and state_data == "ADMIN_SET_PRICE":
                     try:
                         set_number_price(to_decimal(text.strip()))
-                        send_message(chat_id, f"✅ <b>Canada price updated!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(chat_id, f"✅ <b>কানাডা নম্বরের মূল্য আপডেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     except ValueError:
-                        send_message(chat_id, "❌ Invalid amount.")
+                        send_message(chat_id, "❌ ভুল পরিমাণ।")
                     delete_user_state(user_id)
                     return
 
@@ -584,10 +585,10 @@ def handle_update(update):
                     try:
                         parts = text.split()
                         update_balance(int(parts[0]), to_decimal(parts[1]))
-                        send_message(chat_id, f"✅ <b>Balance added successfully!</b>", reply_markup=get_main_keyboard(is_admin))
-                        send_message(int(parts[0]), f"🎉 <b>আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করা হয়েছে!</b>")
+                        send_message(chat_id, f"✅ <b>সফলভাবে ব্যালেন্স যোগ করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(int(parts[0]), f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b>")
                     except Exception:
-                        send_message(chat_id, "❌ Format: <code>USER_ID AMOUNT</code>")
+                        send_message(chat_id, "❌ সঠিক ফরম্যাট: <code>USER_ID AMOUNT</code>")
                     delete_user_state(user_id)
                     return
 
@@ -596,7 +597,7 @@ def handle_update(update):
                         amount = float(text)
                         if amount <= 0: raise ValueError
                         set_user_state(user_id, {"step": "WAITING_TRX", "amount": amount})
-                        send_message(chat_id, f"🟡 <b>Binance Pay (USDT)</b>\n\n🆔 PayID: <code>{BINANCE_PAY_ID}</code>\n💵 Amount: {amount:.2f} USDT\n\nটাকা পাঠানোর পর আপনার <b>TrxID</b> পাঠান:", reply_markup=get_back_keyboard())
+                        send_message(chat_id, f"🟡 <b>Binance Pay (USDT)</b>\n\n🆔 PayID: <code>{BINANCE_PAY_ID}</code>\n💵 পরিমাণ: {amount:.2f} USDT\n\nটাকা পাঠানোর পর আপনার <b>TrxID</b> বা অর্ডার আইডি লিখে পাঠান:", reply_markup=get_back_keyboard())
                         return
                     except ValueError:
                         send_message(chat_id, "❌ সঠিক পরিমাণ লিখুন।")
@@ -604,7 +605,7 @@ def handle_update(update):
 
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_TRX":
                     set_user_state(user_id, {"step": "WAITING_SCREENSHOT", "amount": state_data["amount"], "trx_id": text})
-                    send_message(chat_id, "📸 <b>ধন্যবাদ! এবার পেমেন্টের স্ক্রিনশট পাঠান:</b>", reply_markup=get_back_keyboard())
+                    send_message(chat_id, "📸 <b>ধন্যবাদ! এবার পেমেন্টের স্পষ্ট স্ক্রিনশট (Photo) পাঠান:</b>", reply_markup=get_back_keyboard())
                     return
 
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_SCREENSHOT":
@@ -617,24 +618,24 @@ def handle_update(update):
                                 [{"text": "❌ Reject", "callback_data": f"dep_rej_{user_id}", "style": "danger"}]
                             ]
                         }
-                        send_photo_to_admin(ADMIN_ID, photo_id, f"📥 <b>New Binance Deposit</b>\n👤 @{username} (<code>{user_id}</code>)\n💰 {amt} USDT\nTrxID: <code>{state_data['trx_id']}</code>", reply_markup=admin_markup)
-                        send_message(chat_id, "✅ <b>ডিপোজিট প্রুফ অ্যাডমিনের কাছে পাঠানো হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_photo_to_admin(ADMIN_ID, photo_id, f"📥 <b>নতুন ডিপোজিট রিকোয়েস্ট</b>\n👤 @{username} (<code>{user_id}</code>)\n💰 {amt} USDT\nTrxID: <code>{state_data['trx_id']}</code>", reply_markup=admin_markup)
+                        send_message(chat_id, "✅ <b>আপনার ডিপোজিট তথ্য অ্যাডমিনের কাছে পাঠানো হয়েছে!</b> যাচাই করে ব্যালেন্স যোগ করা হবে।", reply_markup=get_main_keyboard(is_admin))
                         delete_user_state(user_id)
                         return
                     else:
-                        send_message(chat_id, "❌ অনুগ্রহ করে স্ক্রিনশট ছবি পাঠান।", reply_markup=get_back_keyboard())
+                        send_message(chat_id, "❌ অনুগ্রহ করে পেমেন্টের একটি স্ক্রিনশট ছবি পাঠান।", reply_markup=get_back_keyboard())
                         return
 
                 if is_admin and state_data == "ADMIN_BROADCAST":
                     for u_id in get_all_users():
                         try: send_message(u_id, text)
                         except: pass
-                    send_message(chat_id, "✅ <b>Broadcast completed!</b>", reply_markup=get_main_keyboard(is_admin))
+                    send_message(chat_id, f"✅ <b>ব্রডকাস্ট সম্পন্ন হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     delete_user_state(user_id)
                     return
 
             if text == "/start":
-                send_message(chat_id, f"👋 <b>Welcome {html.escape(first_name)}!</b>\n\nনিচের মেনু থেকে সার্ভিস বেছে নিন:", reply_markup=get_main_keyboard(is_admin))
+                send_message(chat_id, f"👋 <b>স্বাগতম {html.escape(first_name)}!</b>\n\nনিচের মেনু থেকে আপনার প্রয়োজনীয় সার্ভিসটি বেছে নিন:", reply_markup=get_main_keyboard(is_admin))
 
             elif text in ["🛒 𝗕𝗨𝗬 𝗡𝗨𝗠𝗕𝗘𝗥", "🛒 BUY NUMBER"]:
                 markup = {
@@ -643,8 +644,7 @@ def handle_update(update):
                         [{"text": "🔢 𝗠𝗨𝗟𝗧𝗜𝗣𝗟𝗘 𝗕𝗨𝗬", "callback_data": "buy_multi_num", "style": "primary"}]
                     ]
                 }
-                send_message(chat_id, "<b>🇨🇦 Canada WhatsApp Service:</b>\n\nমূল্য: <b>$" + format_money_exact(current_price) + " USD</b>\n⚠️ <i>No refund | Valid 20 days</i>", reply_markup=get_back_keyboard())
-                send_message(chat_id, "সার্ভিস অপশন বেছে নিন:", reply_markup=markup)
+                send_message(chat_id, "<b>🇨🇦 Canada WhatsApp Service:</b>\n\nমূল্য: <b>$" + format_money_exact(current_price) + " USD / Number</b>\n⚠️ <i>রিফান্ডযোগ্য নয় | নম্বর মেয়াদ ২০ দিন</i>", reply_markup=markup)
 
             elif text in ["🛡️ 𝗕𝗨𝗬 𝗩𝗣𝗡 / 𝗜𝗣", "🛡️ BUY VPN / IP"]:
                 markup = {
@@ -653,25 +653,22 @@ def handle_update(update):
                         [{"text": f"🌐 DatamaPlus IP (${get_vpn_price('datama'):.2f})", "callback_data": "buy_vpn_datama", "style": "primary"}]
                     ]
                 }
-                send_message(chat_id, "🛡️ <b>VPN / IP Service:</b>", reply_markup=get_back_keyboard())
-                send_message(chat_id, "পছন্দের অপশন সিলেক্ট করুন:", reply_markup=markup)
+                send_message(chat_id, "🛡️ <b>VPN & IP Service Options:</b>\n\nপছন্দের সার্ভিসটি সিলেক্ট করুন:", reply_markup=markup)
 
             elif text in ["💳 𝗗𝗘𝗣𝗢𝗦𝗜𝗧", "💳 DEPOSIT"]:
                 markup = {"inline_keyboard": [[{"text": "🟡 Binance Pay (USDT)", "callback_data": "dep_binance", "style": "success"}]]}
-                send_message(chat_id, "💳 <b>Binance Deposit Gateway</b>", reply_markup=get_back_keyboard())
-                send_message(chat_id, "পেমেন্ট মাধ্যম বেছে নিন:", reply_markup=markup)
+                send_message(chat_id, "💳 <b>Binance Deposit Gateway:</b>\n\nনিচের মাধ্যম থেকে ডিপোজিট করুন:", reply_markup=markup)
 
             elif text in ["👤 𝗣𝗥𝗢𝗙𝗜𝗟𝗘", "👤 PROFILE"]:
                 u = get_user(user_id)
-                send_message(chat_id, f"👤 <b>Your Profile</b>\n\n🆔 ID: <code>{user_id}</code>\n💰 Balance: <b>${format_money_exact(u[2])} USD</b>\n📊 Total Recharge: <b>${format_money_exact(u[3])} USD</b>", reply_markup=get_back_keyboard())
+                send_message(chat_id, f"👤 <b>Your Profile Information</b>\n\n🆔 আইডি: <code>{user_id}</code>\n💰 বর্তমান ব্যালেন্স: <b>${format_money_exact(u[2])} USD</b>\n📊 মোট রিচার্জ: <b>${format_money_exact(u[3])} USD</b>", reply_markup=get_back_keyboard())
 
             elif text in ["🎧 𝗦𝗨𝗣𝗣𝗢𝗥𝗧", "🎧 SUPPORT"]:
-                send_message(chat_id, f"🎧 <b>Support:</b> @{SUPPORT_USERNAME}", reply_markup=get_back_keyboard())
+                send_message(chat_id, f"🎧 <b>ಯেকোনো প্রয়োজনে যোগাযোগ করুন:</b>\n👉 @{SUPPORT_USERNAME}", reply_markup=get_back_keyboard())
 
             elif text in ["⚙️ 𝗔𝗗𝗠𝗜𝗡 𝗣𝗔𝗡𝗘𝗟", "⚙️ ADMIN PANEL"] and is_admin:
                 msg_txt, markup = get_admin_panel_data()
-                send_message(chat_id, msg_txt, reply_markup=get_back_keyboard())
-                send_message(chat_id, "এডমিন প্যানেল কন্ট্রোল:", reply_markup=markup)
+                send_message(chat_id, msg_txt, reply_markup=markup)
 
         elif "callback_query" in update:
             cb = update["callback_query"]
@@ -685,15 +682,67 @@ def handle_update(update):
 
             if data == "noop": return
 
-            if data == "verify_join":
+            if data.startswith("buy_vpn_"):
+                service = "nord" if "nord" in data else "datama"
+                service_title = "NordVPN" if service == "nord" else "DatamaPlus IP"
+                pr = get_vpn_price(service)
+                u_info = get_user(user_id)
+                bal = u_info[2] if u_info else 0.0
+
+                if to_decimal(bal) < to_decimal(pr):
+                    edit_message(chat_id, message_id, f"❌ <b>অপর্যাপ্ত ব্যালেন্স!</b>\n{service_title} কিনতে ${pr:.2f} USD প্রয়োজন। আপনার ব্যালেন্স: ${format_money_exact(bal)} USD।")
+                    return
+
+                conf_markup = {
+                    "inline_keyboard": [
+                        [
+                            {"text": "✅ Confirm Order", "callback_data": f"conf_vpn_{service}", "style": "success"},
+                            {"text": "❌ Cancel", "callback_data": "cancel_vpn", "style": "danger"}
+                        ]
+                    ]
+                }
+                edit_message(chat_id, message_id, f"🛡️ <b>{service_title} Order Confirmation</b>\n\n💰 মূল্য: <b>${pr:.2f} USD</b>\n💵 আপনার ব্যালেন্স: <b>${format_money_exact(bal)} USD</b>\n\nআপনি কি অর্ডারটি নিশ্চিত করতে চান?", reply_markup=conf_markup)
+                return
+
+            elif data.startswith("conf_vpn_"):
+                service = "nord" if "nord" in data else "datama"
+                service_title = "NordVPN" if service == "nord" else "DatamaPlus IP"
+                pr = get_vpn_price(service)
+                u_info = get_user(user_id)
+                bal = u_info[2] if u_info else 0.0
+
+                if to_decimal(bal) < to_decimal(pr):
+                    edit_message(chat_id, message_id, f"❌ <b>পর্যাপ্ত ব্যালেন্স নেই!</b>")
+                    return
+
+                deduct_balance(user_id, pr)
+                order_id = save_vpn_order(user_id, service, pr)
+                send_message(ADMIN_ID, f"🚨 <b>NEW VPN / IP ORDER #{order_id}</b>\n\n👤 User ID: <code>{user_id}</code>\n🛡️ Service: {service_title}\n💰 Price: ${pr:.2f} USD\n\n👉 <i>এই মেসেজে Reply দিয়ে অ্যাকাউন্ট তথ্য পাঠান।</i>")
+                edit_message(chat_id, message_id, f"✅ <b>আপনার {service_title} অর্ডারটি সফলভাবে কনফার্ম হয়েছে!</b>\n\n💰 ফি কাটা হয়েছে: ${pr:.2f} USD\n⏳ অল্প সময়ের মধ্যে অ্যাডমিন ডেলিভারি দিয়ে দেবেন।")
+                return
+
+            elif data == "cancel_vpn":
+                edit_message(chat_id, message_id, "❌ <b>অর্ডারটি বাতিল করা হয়েছে।</b>")
+                return
+
+            elif data == "verify_join":
                 if verify_force_join(user_id)[0]:
                     send_message(chat_id, "✅ <b>ভেরিফিকেশন সফল হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                 else:
-                    send_message(chat_id, "❌ <b>সব চ্যানেলে জয়েন করুন।</b>")
+                    send_message(chat_id, "❌ <b>দয়া করে সবকটি চ্যানেলে জয়েন করুন।</b>")
 
             elif data == "buy_multi_num":
                 set_user_state(user_id, "BUY_MULTI_QTY")
-                send_message(chat_id, "🔢 <b>কতগুলো নম্বর কিনতে চান লিখে পাঠান:</b>", reply_markup=get_back_keyboard())
+                edit_message(chat_id, message_id, "🔢 <b>একসাথে কতগুলো নম্বর কিনতে চান সংখ্যা লিখে পাঠান:</b>\n(যেমন: 2, 5, 10)", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_buy_menu"}]]})
+
+            elif data == "back_to_buy_menu":
+                markup = {
+                    "inline_keyboard": [
+                        [{"text": f"🇨🇦 𝗖𝗔𝗡𝗔𝗗𝗔 𝗪𝗦 (${format_money_exact(current_price)})", "callback_data": "confirm_buy_canada", "style": "success"}],
+                        [{"text": "🔢 𝗠𝗨𝗟𝗧𝗜𝗣𝗟𝗘 𝗕𝗨𝗬", "callback_data": "buy_multi_num", "style": "primary"}]
+                    ]
+                }
+                edit_message(chat_id, message_id, f"<b>🇨🇦 Canada WhatsApp Service:</b>\n\nমূল্য: <b>$" + format_money_exact(current_price) + " USD / Number</b>\n⚠️ <i>রিফান্ডযোগ্য নয় | মেয়াদ ২০ দিন</i>", reply_markup=markup)
 
             elif data == "confirm_buy_canada":
                 u = get_user(user_id)
@@ -702,16 +751,21 @@ def handle_update(update):
                     return
                 phone, link = pop_stock_item()
                 if not phone:
-                    edit_message(chat_id, message_id, "⚠️ <b>স্টক খালি রয়েছে!</b>")
+                    edit_message(chat_id, message_id, "⚠️ <b>দুঃখিত! বর্তমানে স্টক খালি রয়েছে।</b>")
                     return
                 
                 order_id = save_active_order(user_id, phone, link)
                 deduct_balance(user_id, current_price)
                 record_sale_stat(1, current_price, get_cost_price())
 
-                res_text = f"✅ <b>নম্বর সফলভাবে কেনা হয়েছে!</b>\n\n🇨🇦 <code>{phone}</code>\n🔗 {link}\n💰 ফি: ${format_money_exact(current_price)} USD"
-                markup = {"inline_keyboard": [[{"text": "🔄 Check OTP", "callback_data": f"chk_otp_{phone}", "style": "primary"}]]}
-                send_message(chat_id, res_text, reply_markup=markup)
+                res_text = f"✅ <b>নম্বর সফলভাবে বরাদ্দ করা হয়েছে!</b>\n\n🇨🇦 <code>{phone}</code>\n🔗 {link}\n💰 ফি: ${format_money_exact(current_price)} USD"
+                markup = {
+                    "inline_keyboard": [
+                        [{"text": "🔄 Check OTP", "callback_data": f"chk_otp_{phone}", "style": "primary"}],
+                        [{"text": "🛒 Buy Another Number", "callback_data": "confirm_buy_canada", "style": "success"}]
+                    ]
+                }
+                edit_message(chat_id, message_id, res_text, reply_markup=markup)
 
             elif data.startswith("chk_otp_"):
                 phone = data.replace("chk_otp_", "")
@@ -726,9 +780,9 @@ def handle_update(update):
                             update_order_otp(phone, otp)
                             send_message(chat_id, f"🔑 <b>OTP Code:</b> <code>{otp}</code>")
                             if OTP_GROUP_ID:
-                                send_message(OTP_GROUP_ID, f"🎉 <b>New OTP:</b> <code>{otp}</code> (📱 {mask_phone_number(phone)})")
+                                send_message(OTP_GROUP_ID, f"🎉 <b>New OTP Received:</b> <code>{otp}</code> (📱 {mask_phone_number(phone)})")
                         else:
-                            send_message(chat_id, "⌛ <b>OTP এখনো আসেনি! কিছুক্ষণ পর চেষ্টা করুন।</b>")
+                            send_message(chat_id, "⌛ <b>OTP এখনো আসেনি! কিছুক্ষণ পর আবার চেষ্টা করুন।</b>")
                     except Exception:
                         send_message(chat_id, "⚠️ <b>OTP ফেচ করতে সমস্যা হয়েছে।</b>")
 
@@ -736,7 +790,7 @@ def handle_update(update):
                 stats_cursor = daily_stats_col.find().sort("date", -1).limit(7)
                 hist_text = "📊 <b>𝗟𝗔𝗦𝗧 𝟩 𝗗𝗔𝗬𝗦 𝗗𝗘𝗣𝗢𝗦𝗜𝗧 & 𝗣𝗥𝗢𝗙𝗜𝗧 𝗛𝗜𝗦𝗧𝗢𝗥𝗬</b>\n\n"
                 for doc in stats_cursor:
-                    hist_text += f"📅 <b>Date:</b> {doc['date']}\n   💵 Deposit: ${format_money_exact(doc.get('total_deposit', 0))} USDT\n   🛒 Sold: {doc.get('total_sold', 0)} Pcs\n   💰 Revenue: ${format_money_exact(doc.get('total_revenue', 0))}\n   🔥 Profit: ${format_money_exact(doc.get('total_profit', 0))}\n\n"
+                    hist_text += f"📅 <b>তারিখ:</b> {doc['date']}\n   💵 ডিপোজিট: ${format_money_exact(doc.get('total_deposit', 0))} USDT\n   🛒 বিক্রয়: {doc.get('total_sold', 0)} টি\n   💰 রেভিনিউ: ${format_money_exact(doc.get('total_revenue', 0))}\n   🔥 নেট প্রফিট: ${format_money_exact(doc.get('total_profit', 0))}\n\n"
                 edit_message(chat_id, message_id, hist_text, reply_markup={"inline_keyboard": [[{"text": "⬅️ 𝗕𝗮𝗰𝗸", "callback_data": "admin_panel_back"}]]})
 
             elif data == "admin_panel_back" and is_admin:
@@ -753,7 +807,11 @@ def handle_update(update):
 
             elif data == "dep_binance":
                 set_user_state(user_id, {"step": "WAITING_AMOUNT"})
-                send_message(chat_id, "🟡 <b>Binance Deposit:</b> কত USDT ডিপোজিট করতে চান লিখুন:", reply_markup=get_back_keyboard())
+                edit_message(chat_id, message_id, "🟡 <b>Binance Deposit Gateway:</b>\n\nকত USDT ডিপোজিট করতে চান সংখ্যাটি লিখে পাঠান:", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_main_menu"}]]})
+
+            elif data == "back_to_main_menu":
+                markup = {"inline_keyboard": [[{"text": "🟡 Binance Pay (USDT)", "callback_data": "dep_binance", "style": "success"}]]}
+                edit_message(chat_id, message_id, "💳 <b>Binance Deposit Gateway</b>\n\nপেমেন্ট মাধ্যম বেছে নিন:", reply_markup=markup)
 
             elif data == "admin_set_rate" and is_admin:
                 set_user_state(user_id, "ADMIN_SET_PRICE")
@@ -776,7 +834,7 @@ def handle_update(update):
 
             elif data == "admin_delete_stock_execute" and is_admin:
                 clear_all_stock()
-                edit_message(chat_id, message_id, "🗑️ <b>স্টক খালি করা হয়েছে!</b>")
+                edit_message(chat_id, message_id, "🗑️ <b>স্টক সফলভাবে খালি করা হয়েছে!</b>")
 
             elif data.startswith("appusd_") and is_admin:
                 parts = data.split("_")
@@ -784,7 +842,7 @@ def handle_update(update):
                 update_balance(u_id, amt)
                 record_deposit_stat(amt)
                 send_message(chat_id, f"✅ <b>Balance credited & recorded!</b>")
-                send_message(u_id, f"🎉 <b>আপনার ডিপোজিট সফল হয়েছে! ${format_money_exact(amt)} USD যোগ করা হয়েছে।</b>")
+                send_message(u_id, f"🎉 <b>আপনার ডিপোজিট সফল হয়েছে! ${format_money_exact(amt)} USD অ্যাকাউন্টে যোগ করা হয়েছে।</b>")
 
             elif data.startswith("dep_rej_") and is_admin:
                 u_id = int(data.replace("dep_rej_", ""))
@@ -796,7 +854,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Premium Style & Stats...")
+    print("🚀 Canada OTP Bot Engine Online with Inline Popups & Clean Style...")
     offset = 0
     while True:
         try:
