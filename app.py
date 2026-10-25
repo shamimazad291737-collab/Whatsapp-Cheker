@@ -803,10 +803,12 @@ def handle_update(update):
                 send_message(chat_id, f"<b><tg-emoji emoji-id=\"5397916757333654639\">🇨🇦</tg-emoji> <tg-emoji emoji-id=\"5429651785352501917\">💬</tg-emoji> Canada WhatsApp Service:</b>\n\nমূল্য: <b><tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>" + format_money_exact(current_price) + " USD / Number</b>\n⚠️ <i>রিফান্ডযোগ্য নয় | নম্বর মেয়াদ ২০ দিন</i>", reply_markup=markup)
 
             elif text in ["🛡️ 𝗕𝗨𝗬 𝗩𝗣𝗡 / 𝗜𝗣", "🛡️ BUY VPN / IP"]:
+                nord_pr = get_vpn_price('nord')
+                datama_pr = get_vpn_price('datama')
                 markup = {
                     "inline_keyboard": [
-                        [{"text": f"🛡️ NordVPN (${get_vpn_price('nord'):.2f})", "callback_data": "buy_vpn_nord", "style": "primary"}],
-                        [{"text": "🌐 DatamaPlus IP (${get_vpn_price('datama'):.2f})", "callback_data": "buy_vpn_datama", "style": "primary"}]
+                        [{"text": f"🛡️ NordVPN (${nord_pr:.2f})", "callback_data": "buy_vpn_nord", "style": "primary"}],
+                        [{"text": f"🌐 DatamaPlus IP (${datama_pr:.2f})", "callback_data": "buy_vpn_datama", "style": "primary"}]
                     ]
                 }
                 send_message(chat_id, f"<tg-emoji emoji-id=\"5420155432272438703\">🛡️</tg-emoji> <b>VPN & IP Service Options:</b>\n\nপছন্দের সার্ভিসটি সিলেক্ট করুন:", reply_markup=markup)
@@ -854,7 +856,7 @@ def handle_update(update):
                 bal = u_info[2] if u_info else 0.0
 
                 if to_decimal(bal) < to_decimal(pr):
-                    edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b>\n{service_title} কিনতে <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{pr:.2f} USD প্রয়োজন। আপনার ব্যালেন্স: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{format_money_exact(bal)} USD।")
+                    edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b>\n{service_title} কিনতে <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{pr:.2f} USD প্রয়োজন। আপনার ব্যালেন্স: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{format_money_exact(bal)} USD.")
                     return
 
                 conf_markup = {
