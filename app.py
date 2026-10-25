@@ -373,7 +373,7 @@ def verify_force_join(user_id):
     not_joined = [ch for ch in channels if not check_channel_member(user_id, ch)]
     return len(not_joined) == 0, not_joined
 
-# Keyboards with New Custom Premium Emojis
+# Keyboards with Styled Premium Icons for Buttons
 def get_main_keyboard(is_admin=False):
     kb = [
         [
@@ -502,7 +502,7 @@ def handle_update(update):
                 return
 
             if not is_admin and not bot_active:
-                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন।")
+                send_message(chat_id, "⚠️ <b>সাময়িক সময়ের জন্য বট আপডেট করা হচ্ছে!</b> অনুগ্রহ করে একটু অপেক্ষা করুন።")
                 return
 
             if not is_admin:
