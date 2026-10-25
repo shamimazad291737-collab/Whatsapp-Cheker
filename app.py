@@ -131,7 +131,7 @@ init_settings()
 migrate_money_fields_to_decimal128()
 
 # Binance Pay ID
-BINANCE_PAY_ID = "907194603"
+BINANCE_PAY_ID = "1289098351"
 
 # Daily Statistics Trackers (Deposit & Profit with Midnight Reset)
 def get_today_date_str():
