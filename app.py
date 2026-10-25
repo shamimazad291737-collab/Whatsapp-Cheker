@@ -48,16 +48,20 @@ def detect_language(text):
         return "EN"
     return "OTHERS"
 
-# Flask app initialization for Render Port Binding
+# Flask app initialization for Render Port Binding & UptimeRobot Ping Keep-Alive
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running perfectly with MongoDB!"
+    return "Bot is running perfectly with MongoDB & UptimeRobot Active!", 200
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 # Environment Variables & Multi-Admin Support
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -811,7 +815,6 @@ def handle_update(update):
 
                 elif isinstance(state_data, dict) and state_data.get("step") == "WAITING_SCREENSHOT":
                     if "photo" in msg:
-                        # ডাবল সাবমিশন বা ডুপ্লিকেট রোধ করতে আগেই স্টেট রিমুভ করা হলো
                         current_amt = state_data["amount"]
                         current_trx = state_data["trx_id"]
                         delete_user_state(user_id)
@@ -1127,7 +1130,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Duplicate Prevention & Balance Deduct...")
+    print("🚀 Canada OTP Bot Engine Online with Keep-Alive / UptimeRobot Fix...")
     offset = 0
     while True:
         try:
