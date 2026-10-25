@@ -277,6 +277,13 @@ def update_balance(user_id, amount_usd):
         {"$inc": {"balance": Decimal128(amount), "total_recharge": Decimal128(amount)}}
     )
 
+def admin_deduct_user_balance(user_id, amount_usd):
+    amount = to_decimal(amount_usd)
+    users_col.update_one(
+        {"user_id": user_id},
+        {"$inc": {"balance": Decimal128(-amount)}}
+    )
+
 def deduct_balance(user_id, amount_usd):
     amount = to_decimal(amount_usd)
     result = users_col.update_one(
@@ -472,7 +479,10 @@ def get_admin_panel_data():
             [toggle_btn],
             [{"text": "📊 𝗗𝗔𝗜𝗟𝗬 𝗗𝗘𝗣𝗢𝗦𝗜𝗧 & 𝗣𝗥𝗢𝗙𝗜𝗧 𝗛𝗜𝗦𝗧𝗢𝗥𝗬", "callback_data": "admin_view_history", "style": "success"}],
             [{"text": "📊 𝗗𝗔𝗜𝗟𝗬 𝗨𝗦𝗘𝗥 𝗦𝗧𝗔𝗧𝗦", "callback_data": "admin_daily_stats_1", "style": "success"}],
-            [{"text": "➕ 𝗔𝗗𝗗 𝗕𝗔𝗟𝗔𝗡𝗖𝗘", "callback_data": "admin_direct_add_balance", "style": "success"}],
+            [
+                {"text": "➕ 𝗔𝗗𝗗 𝗕𝗔𝗟", "callback_data": "admin_direct_add_balance", "style": "success"},
+                {"text": "➖ 𝗠𝗜𝗡𝗨𝗦 𝗕𝗔𝗟", "callback_data": "admin_direct_deduct_balance", "style": "danger"}
+            ],
             [{"text": "🏷️ 𝗖𝗵𝗮𝗻𝗴𝗲 𝗖𝗮𝗻𝗮𝗱𝗮 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_rate", "style": "primary"}],
             [{"text": "🛡️ 𝗦𝗲𝘁 𝗡𝗼𝗿𝗱 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_nord_price", "style": "primary"}, {"text": "🌐 𝗦𝗲𝘁 𝗗𝗮𝘁𝗮𝗺𝗮 𝗣𝗿𝗶𝗰𝗲", "callback_data": "admin_set_datama_price", "style": "primary"}],
             [{"text": "📁 𝗨𝗽𝗹𝗼𝗮𝗱 𝗩𝗣𝗡 𝗦𝘁𝗼𝗰𝗸", "callback_data": "admin_upload_vpn_file", "style": "success"}, {"text": "📢 𝗙𝗼𝗿𝗰𝗲 𝗝𝗼𝗶𝗻 (Group/Channel)", "callback_data": "admin_set_channels", "style": "success"}],
@@ -695,6 +705,33 @@ def handle_update(update):
                         send_message(target_user_id, f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> পরিমাণ: <b>${format_money_exact(add_amt)} USD</b>")
                     except Exception:
                         send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক পরিমাণ লিখুন (যেমন: <code>0.136</code>):")
+                        return
+                    delete_user_state(user_id)
+                    return
+
+                if is_admin and isinstance(state_data, dict) and state_data.get("step") == "ADMIN_DEDUCT_BAL_USER":
+                    try:
+                        target_user_id = int(text.strip())
+                        set_user_state(user_id, {"step": "ADMIN_DEDUCT_BAL_AMT", "target_user_id": target_user_id})
+                        send_message(chat_id, f"➖ <b>ইউজার আইডি:</b> <code>{target_user_id}</code>\n\nএবার কত পরিমাণ ব্যালেন্স (USD/USDT) মাইনাস বা কাটতে চান সংখ্যা লিখে পাঠান (যেমন: <code>1.5</code> বা <code>0.136</code>):", reply_markup=get_back_keyboard())
+                        return
+                    except ValueError:
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক ইউজার আইডি (সংখ্যা) লিখুন:")
+                        return
+
+                if is_admin and isinstance(state_data, dict) and state_data.get("step") == "ADMIN_DEDUCT_BAL_AMT":
+                    try:
+                        deduct_amt = to_decimal(text.strip())
+                        if deduct_amt <= 0:
+                            raise ValueError
+                        target_user_id = state_data["target_user_id"]
+                        
+                        admin_deduct_user_balance(target_user_id, deduct_amt)
+                        
+                        send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে ${format_money_exact(deduct_amt)} ব্যালেন্স ইউজার (<code>{target_user_id}</code>) এর অ্যাকাউন্ট থেকে মাইনাস করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(target_user_id, f"⚠️ <b>এডমিন আপনার অ্যাকাউন্ট থেকে ব্যালেন্স কেটে নিয়েছেন!</b>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> কাটা হয়েছে: <b>${format_money_exact(deduct_amt)} USD</b>")
+                    except Exception:
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক পরিমাণ লিখুন (যেমন: <code>0.5</code>):")
                         return
                     delete_user_state(user_id)
                     return
@@ -996,6 +1033,10 @@ def handle_update(update):
                 set_user_state(user_id, {"step": "ADMIN_ADD_BAL_USER"})
                 send_message(chat_id, "➕ <b>ইউজার ব্যালেন্স যোগ করতে চান:</b>\n\nপ্রথমে যে ইউজারের ব্যালেন্স যোগ করবেন তার <b>User ID</b> লিখে পাঠান:", reply_markup=get_back_keyboard())
 
+            elif data == "admin_direct_deduct_balance" and is_admin:
+                set_user_state(user_id, {"step": "ADMIN_DEDUCT_BAL_USER"})
+                send_message(chat_id, "➖ <b>ইউজার ব্যালেন্স মাইনাস (কাটতে) চান:</b>\n\nপ্রথমে যে ইউজারের ব্যালেন্স কাটবেন তার <b>User ID</b> লিখে পাঠান:", reply_markup=get_back_keyboard())
+
             elif data == "dep_binance":
                 set_user_state(user_id, {"step": "WAITING_AMOUNT"})
                 edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Deposit Gateway:</b>\n\nকত USDT ডিপোজিট করতে চান সংখ্যাটি লিখে পাঠান (মিনিমাম ০.৫ USDT):", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_main_menu"}]]})
@@ -1082,7 +1123,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Fixed Deposit & Approvals...")
+    print("🚀 Canada OTP Bot Engine Online with Balance Deduct/Minus Feature...")
     offset = 0
     while True:
         try:
