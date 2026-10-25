@@ -9,17 +9,6 @@ from flask import Flask
 from pymongo import MongoClient
 from decimal import Decimal, InvalidOperation
 from bson.decimal128 import Decimal128
-import os
-import requests
-import html
-import threading
-import time
-import re
-from datetime import datetime, timedelta
-from flask import Flask
-from pymongo import MongoClient
-from decimal import Decimal, InvalidOperation
-from bson.decimal128 import Decimal128
 
 # Language Detector Function with expanded shortcodes mapping & fix
 def detect_language(text):
@@ -576,7 +565,7 @@ def handle_update(update):
                         res_msg = f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে {len(purchased_list)} টি নম্বর কেনা হয়েছে!</b>\n\n"
                         multi_btns = []
                         for idx, (p, l, oid) in enumerate(purchased_list, 1):
-                            res_msg += f"<b>{idx}.</b> 📱 <code>{p}</code> | 🔗 {l}\n"
+                            res_msg += f"<b>{idx}.</b> 📱 <code>{p}</code>\n🔗 {l}\n\n"
                             if idx <= 10:
                                 multi_btns.append([{"text": f"🔄 Check OTP ({p})", "callback_data": f"chk_otp_{p}", "style": "primary"}])
 
@@ -633,17 +622,29 @@ def handle_update(update):
                     return
 
                 if is_admin and state_data == "ADMIN_UPLOAD_FILE":
-                    lines = text.split("\n")
+                    file_content = ""
+                    if "document" in msg:
+                        doc = msg["document"]
+                        file_id = doc["file_id"]
+                        file_info = requests.get(BASE_URL + f"getFile?file_id={file_id}").json()
+                        if file_info.get("ok"):
+                            file_path = file_info["result"]["file_path"]
+                            download_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+                            resp = requests.get(download_url)
+                            file_content = resp.text
+                    else:
+                        file_content = text
+
+                    lines = file_content.split("\n")
                     count = 0
                     for line in lines:
                         line_clean = line.strip()
                         if not line_clean:
                             continue
-                        # Skip header if present
-                        if "Phone Number" in line_clean or "Direct Link" in line_clean:
+                        if "Phone Number" in line_clean or "Direct Link" in line_clean or "====" in line_clean:
                             continue
                         
-                        # Handle CSV format with or without quotes: "number","link",...
+                        # Handle comma separated or space/dash separated lines
                         if "," in line_clean:
                             parts = [p.strip().strip('"').strip("'") for p in line_clean.split(",")]
                             if len(parts) >= 2:
@@ -652,6 +653,17 @@ def handle_update(update):
                                 if phone and link and phone.startswith("+"):
                                     add_stock_item(phone, link)
                                     count += 1
+                        elif "http" in line_clean:
+                            # Fallback pattern if format is like +number---link
+                            for sep in ["----", "---", "--", " "]:
+                                if sep in line_clean:
+                                    parts = line_clean.split(sep, 1)
+                                    phone = parts.strip()
+                                    link = parts.strip()
+                                    if phone and link and phone.startswith("+"):
+                                        add_stock_item(phone, link)
+                                        count += 1
+                                    break
 
                     send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> সফলভাবে <b>{count}</b> টি নম্বর স্টক করা হয়েছে!", reply_markup=get_main_keyboard(is_admin))
                     delete_user_state(user_id)
@@ -847,7 +859,7 @@ def handle_update(update):
                 deduct_balance(user_id, current_price)
                 record_sale_stat(1, current_price, get_cost_price())
 
-                res_text = f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>নম্বর সফলভাবে বরাদ্দ করা হয়েছে!</b>\n\n<tg-emoji emoji-id=\"5397916757333654639\">🇨🇦</tg-emoji> <code>{phone}</code>\n🔗 {link}\n ফি: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(current_price)} USD"
+                res_text = f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>নম্বর সফলভাবে বরাদ্দ করা হয়েছে!</b>\n\n<tg-emoji emoji-id=\"5397916757333654639\">🇨🇦</tg-emoji> <code>{phone}</code>\n{link}\n\nফি: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(current_price)} USD"
                 markup = {
                     "inline_keyboard": [
                         [{"text": "🔄 Check OTP", "callback_data": f"chk_otp_{phone}", "style": "primary"}],
@@ -940,7 +952,7 @@ def handle_update(update):
 
             elif data == "admin_upload_file" and is_admin:
                 set_user_state(user_id, "ADMIN_UPLOAD_FILE")
-                send_message(chat_id, "📁 নম্বর স্টক টেক্সট আকারে পাঠান (format: <code>+number, link</code> প্রতি লাইনে একটি)", reply_markup=get_back_keyboard())
+                send_message(chat_id, "📁 নম্বর স্টক টেক্সট ফাইল (.txt) আকারে আপলোড করুন বা টেক্সট পেস্ট করুন:", reply_markup=get_back_keyboard())
 
             elif data == "admin_view_stock" and is_admin:
                 items = get_all_stock()
