@@ -1045,8 +1045,8 @@ def handle_update(update):
 
             elif data.startswith("appusd_") and is_admin:
                 parts = data.split("_")
-                u_id = int(parts)
-                amt = float(parts)
+                u_id = int(parts[1])
+                amt = float(parts[2])
                 update_balance(u_id, amt)
                 record_deposit_stat(amt)
                 edit_message(chat_id, message_id, cb["message"].get("text", "") + f"\n\n<b>✅ Approved by Admin ({user_id})</b>")
