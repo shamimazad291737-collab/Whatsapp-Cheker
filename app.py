@@ -586,20 +586,31 @@ def handle_update(update):
                     delete_user_state(user_id)
                     return
 
-                if is_admin and state_data == "ADMIN_DIRECT_ADD_BAL":
+                if is_admin and isinstance(state_data, dict) and state_data.get("step") == "ADMIN_ADD_BAL_USER":
                     try:
-                        parts = text.split()
-                        if len(parts) >= 2:
-                            target_user_id = int(parts)
-                            add_amt = to_decimal(parts)
-                            update_balance(target_user_id, add_amt)
-                            record_deposit_stat(add_amt)
-                            send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে ব্যালেন্স যোগ করা হয়েছে এবং স্ট্যাটাসে রেকর্ড হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
-                            send_message(target_user_id, f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b> (${format_money_exact(add_amt)} USD)")
-                        else:
+                        target_user_id = int(text.strip())
+                        set_user_state(user_id, {"step": "ADMIN_ADD_BAL_AMT", "target_user_id": target_user_id})
+                        send_message(chat_id, f"💵 <b>ইউজার আইডি:</b> <code>{target_user_id}</code>\n\nএবার কত পরিমাণ ব্যালেন্স (USD/USDT) যোগ করতে চান সংখ্যা লিখে পাঠান (যেমন: <code>0.136</code> বা <code>5</code>):", reply_markup=get_back_keyboard())
+                        return
+                    except ValueError:
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক ইউজার আইডি (সংখ্যা) লিখুন:")
+                        return
+
+                if is_admin and isinstance(state_data, dict) and state_data.get("step") == "ADMIN_ADD_BAL_AMT":
+                    try:
+                        add_amt = to_decimal(text.strip())
+                        if add_amt <= 0:
                             raise ValueError
+                        target_user_id = state_data["target_user_id"]
+                        
+                        update_balance(target_user_id, add_amt)
+                        record_deposit_stat(add_amt)
+                        
+                        send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে ${format_money_exact(add_amt)} ব্যালেন্স ইউজার (<code>{target_user_id}</code>) এর অ্যাকাউন্টে যোগ করা হয়েছে এবং ডিপোজিট স্ট্যাটাসে রেকর্ড হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                        send_message(target_user_id, f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> পরিমাণ: <b>${format_money_exact(add_amt)} USD</b>")
                     except Exception:
-                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক ফরম্যাট: <code>USER_ID AMOUNT</code> (যেমন: <code>7903794826 0.136</code>)")
+                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক পরিমাণ লিখুন (যেমন: <code>0.136</code>):")
+                        return
                     delete_user_state(user_id)
                     return
 
@@ -861,8 +872,8 @@ def handle_update(update):
                 edit_message(chat_id, message_id, s_msg, reply_markup=s_markup)
 
             elif data == "admin_direct_add_balance" and is_admin:
-                set_user_state(user_id, "ADMIN_DIRECT_ADD_BAL")
-                send_message(chat_id, "➕ Format: <code>USER_ID AMOUNT</code>\n(যেমন: <code>7903794826 0.136</code>)", reply_markup=get_back_keyboard())
+                set_user_state(user_id, {"step": "ADMIN_ADD_BAL_USER"})
+                send_message(chat_id, "➕ <b>ইউজার ব্যালেন্স যোগ করতে চান:</b>\n\nপ্রথমে যে ইউজারের ব্যালেন্স যোগ করবেন তার <b>User ID</b> লিখে পাঠান:", reply_markup=get_back_keyboard())
 
             elif data == "dep_binance":
                 set_user_state(user_id, {"step": "WAITING_AMOUNT"})
