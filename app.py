@@ -519,6 +519,51 @@ def handle_update(update):
                     return
 
             state_data = get_user_state(user_id)
+            
+            # Direct check for file upload even if state_data is set or lost
+            if is_admin and "document" in msg:
+                doc = msg["document"]
+                file_id = doc["file_id"]
+                file_info = requests.get(BASE_URL + f"getFile?file_id={file_id}").json()
+                file_content = ""
+                if file_info.get("ok"):
+                    file_path = file_info["result"]["file_path"]
+                    download_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+                    resp = requests.get(download_url)
+                    file_content = resp.text
+
+                lines = file_content.split("\n")
+                count = 0
+                for line in lines:
+                    line_clean = line.strip()
+                    if not line_clean:
+                        continue
+                    if "Phone Number" in line_clean or "Direct Link" in line_clean or "====" in line_clean or "VNUM" in line_clean or "Purchased" in line_clean or "Time:" in line_clean:
+                        continue
+                    
+                    if "," in line_clean:
+                        parts = [p.strip().strip('"').strip("'") for p in line_clean.split(",")]
+                        if len(parts) >= 2:
+                            phone = parts[0]
+                            link = parts[1]
+                            if phone and link and phone.startswith("+"):
+                                add_stock_item(phone, link)
+                                count += 1
+                    elif "http" in line_clean:
+                        for sep in ["----", "---", "--", " "]:
+                            if sep in line_clean:
+                                parts = line_clean.split(sep, 1)
+                                phone = parts[0].strip()
+                                link = parts[1].strip()
+                                if phone and link and phone.startswith("+"):
+                                    add_stock_item(phone, link)
+                                    count += 1
+                                break
+
+                send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> সফলভাবে <b>{count}</b> টি নম্বর স্টক করা হয়েছে!", reply_markup=get_main_keyboard(is_admin))
+                delete_user_state(user_id)
+                return
+
             if state_data:
                 if is_admin and isinstance(state_data, str) and state_data.startswith("ADMIN_SET_PRICE_CUSTOM"):
                     service = "nord" if "nord" in state_data else "datama"
@@ -565,7 +610,7 @@ def handle_update(update):
                         res_msg = f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে {len(purchased_list)} টি নম্বর কেনা হয়েছে!</b>\n\n"
                         multi_btns = []
                         for idx, (p, l, oid) in enumerate(purchased_list, 1):
-                            res_msg += f"<b>{idx}.</b> 📱 <code>{p}</code>\n🔗 {l}\n\n"
+                            res_msg += f"<b>{idx}.</b> 📱 <code>{p}</code>\n{l}\n\n"
                             if idx <= 10:
                                 multi_btns.append([{"text": f"🔄 Check OTP ({p})", "callback_data": f"chk_otp_{p}", "style": "primary"}])
 
@@ -622,44 +667,29 @@ def handle_update(update):
                     return
 
                 if is_admin and state_data == "ADMIN_UPLOAD_FILE":
-                    file_content = ""
-                    if "document" in msg:
-                        doc = msg["document"]
-                        file_id = doc["file_id"]
-                        file_info = requests.get(BASE_URL + f"getFile?file_id={file_id}").json()
-                        if file_info.get("ok"):
-                            file_path = file_info["result"]["file_path"]
-                            download_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
-                            resp = requests.get(download_url)
-                            file_content = resp.text
-                    else:
-                        file_content = text
-
-                    lines = file_content.split("\n")
+                    lines = text.split("\n")
                     count = 0
                     for line in lines:
                         line_clean = line.strip()
                         if not line_clean:
                             continue
-                        if "Phone Number" in line_clean or "Direct Link" in line_clean or "====" in line_clean:
+                        if "Phone Number" in line_clean or "Direct Link" in line_clean or "====" in line_clean or "VNUM" in line_clean or "Purchased" in line_clean or "Time:" in line_clean:
                             continue
                         
-                        # Handle comma separated or space/dash separated lines
                         if "," in line_clean:
                             parts = [p.strip().strip('"').strip("'") for p in line_clean.split(",")]
                             if len(parts) >= 2:
-                                phone = parts
-                                link = parts
+                                phone = parts[0]
+                                link = parts[1]
                                 if phone and link and phone.startswith("+"):
                                     add_stock_item(phone, link)
                                     count += 1
                         elif "http" in line_clean:
-                            # Fallback pattern if format is like +number---link
                             for sep in ["----", "---", "--", " "]:
                                 if sep in line_clean:
                                     parts = line_clean.split(sep, 1)
-                                    phone = parts.strip()
-                                    link = parts.strip()
+                                    phone = parts[0].strip()
+                                    link = parts[1].strip()
                                     if phone and link and phone.startswith("+"):
                                         add_stock_item(phone, link)
                                         count += 1
@@ -675,8 +705,8 @@ def handle_update(update):
                     for line in lines:
                         if "|" in line:
                             parts = line.split("|", 1)
-                            srv = parts.strip().lower()
-                            acc = parts.strip()
+                            srv = parts[0].strip().lower()
+                            acc = parts[1].strip()
                             if srv in ["nord", "datama"] and acc:
                                 add_vpn_stock_item(srv, acc)
                                 count += 1
