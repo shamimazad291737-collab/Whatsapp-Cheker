@@ -234,6 +234,7 @@ def get_force_channels():
     return doc.get("channels", []) if doc else []
 
 def set_force_channels(channels_list):
+    # Completely overwrite old list with the new list
     settings_col.update_one({"key": "force_channels"}, {"$set": {"channels": channels_list}}, upsert=True)
 
 def get_all_users():
@@ -362,7 +363,6 @@ def check_channel_member(user_id, channel_input):
             path = ch.split("t.me/")[-1].replace("/", "")
             ch = path if (path.startswith("+") or path.startswith("joinchat")) else "@" + path
         elif not ch.startswith("@") and not ch.startswith("-100"):
-            # If it's a numeric ID or chat ID without -100 prefix for supergroups
             if ch.lstrip("-").isdigit():
                 ch = "-100" + ch if not ch.startswith("-100") else ch
             else:
@@ -381,6 +381,34 @@ def verify_force_join(user_id):
         return True, []
     not_joined = [ch for ch in channels if not check_channel_member(user_id, ch)]
     return len(not_joined) == 0, not_joined
+
+def get_chat_invite_link(chat_input):
+    try:
+        ch = channel_input.strip()
+        if "t.me/" in ch:
+            return ch if ch.startswith("http") else "https://" + ch
+        
+        if not ch.startswith("@") and not ch.startswith("-100"):
+            if ch.lstrip("-").isdigit():
+                ch = "-100" + ch if not ch.startswith("-100") else ch
+            else:
+                ch = "@" + ch
+
+        res = requests.post(BASE_URL + "getChat", json={"chat_id": ch}, timeout=5).json()
+        if res.get("ok"):
+            chat_data = res["result"]
+            if "invite_link" in chat_data:
+                return chat_data["invite_link"]
+            elif "username" in chat_data:
+                return f"https://t.me/{chat_data['username']}"
+    except Exception as e:
+        print(f"Get invite link error: {e}")
+    
+    # Fallback to direct username or link format if API fails to retrieve invite link
+    if "t.me/" in channel_input:
+        return channel_input if channel_input.startswith("http") else "https://" + channel_input
+    clean_ch = channel_input.strip().replace("@", "")
+    return f"https://t.me/{clean_ch}"
 
 # Keyboards with Styled Premium Icons for Buttons
 def get_main_keyboard(is_admin=False):
@@ -517,7 +545,10 @@ def handle_update(update):
             if not is_admin:
                 is_joined, missing = verify_force_join(user_id)
                 if not is_joined:
-                    buttons = [[{"text": f"📢 Join Group/Channel {i+1}", "url": f"https://t.me/{ch.strip().replace('@','')}"}] if not ch.startswith("-100") else [{"text": f"📢 Join Group {i+1}", "url": "https://t.me/"}] for i, ch in enumerate(missing)]
+                    buttons = []
+                    for i, ch in enumerate(missing):
+                        link = get_chat_invite_link(ch)
+                        buttons.append([{"text": f"📢 Join Group/Channel {i+1}", "url": link}])
                     buttons.append([{"text": "🔄 𝗩𝗲𝗿𝗶𝗳𝘆 𝗝𝗼𝗶𝗻", "callback_data": "verify_join"}])
                     send_message(chat_id, "⚠️ <b>বটটি ব্যবহার করতে নিচের গ্রুপ বা চ্যানেলগুলোতে অবশ্যই জয়েন করুন:</b>", reply_markup={"inline_keyboard": buttons})
                     return
@@ -666,7 +697,7 @@ def handle_update(update):
                 if is_admin and state_data == "ADMIN_SET_CHANNELS":
                     channels = [ch.strip() for ch in text.split(",") if ch.strip()]
                     set_force_channels(channels)
-                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>ফোর্স জয়েন চ্যানেল বা গ্রুপ সেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
+                    send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>পুরোনো লিস্ট মুছে ফেলে নতুন ফোর্স জয়েন চ্যানেল/গ্রুপ সফলভাবে সেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
                     delete_user_state(user_id)
                     return
 
@@ -910,7 +941,6 @@ def handle_update(update):
                     
                     def live_check_otp(target_chat_id, target_phone, target_link):
                         start_time = time.time()
-                        # Run for 60 seconds, checking every 5 seconds (12 attempts)
                         while time.time() - start_time < 60:
                             try:
                                 resp = requests.get(target_link, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
@@ -974,7 +1004,7 @@ def handle_update(update):
 
             elif data == "admin_set_channels" and is_admin:
                 set_user_state(user_id, "ADMIN_SET_CHANNELS")
-                send_message(chat_id, "📢 চ্যানেল ইউজারনেম বা গ্রুপ Chat ID দিন (একাধিক হলে কমা দিয়ে লিখুন যেমন: @channel1, -100123456789):", reply_markup=get_back_keyboard())
+                send_message(chat_id, "📢 চ্যানেল ইউজারনেম বা গ্রুপ Chat ID দিন (একাধিক হলে কমা দিয়ে লিখুন যেমন: @channel1, -100123456789):\n⚠️ <i>মনে রাখবেন, নতুন লিস্ট সেট করলে আগেরগুলো মুছে যাবে।</i>", reply_markup=get_back_keyboard())
 
             elif data == "admin_upload_vpn_file" and is_admin:
                 set_user_state(user_id, "ADMIN_UPLOAD_VPN_FILE")
