@@ -10,6 +10,18 @@ from pymongo import MongoClient
 from decimal import Decimal, InvalidOperation
 from bson.decimal128 import Decimal128
 
+import os
+import requests
+import html
+import threading
+import time
+import re
+from datetime import datetime, timedelta
+from flask import Flask
+from pymongo import MongoClient
+from decimal import Decimal, InvalidOperation
+from bson.decimal128 import Decimal128
+
 # Language Detector Function with expanded shortcodes mapping & fix
 def detect_language(text):
     if not text:
@@ -520,16 +532,6 @@ def handle_update(update):
 
             state_data = get_user_state(user_id)
             if state_data:
-                if is_admin and isinstance(state_data, str) and state_data.startswith("ADMIN_SET_NORD"):
-                    service = "nord" if "NORD" in state_data else "datama"
-                    try:
-                        set_vpn_price(service, float(text))
-                        send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>মূল্য সফলভাবে আপডেট করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
-                    except ValueError:
-                        send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক সংখ্যা লিখুন।")
-                    delete_user_state(user_id)
-                    return
-
                 if is_admin and isinstance(state_data, str) and state_data.startswith("ADMIN_SET_PRICE_CUSTOM"):
                     service = "nord" if "nord" in state_data else "datama"
                     try:
@@ -599,9 +601,9 @@ def handle_update(update):
                 if is_admin and state_data == "ADMIN_DIRECT_ADD_BAL":
                     try:
                         parts = text.split()
-                        update_balance(int(parts[0]), to_decimal(parts[1]))
+                        update_balance(int(parts), to_decimal(parts))
                         send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>সফলভাবে ব্যালেন্স যোগ করা হয়েছে!</b>", reply_markup=get_main_keyboard(is_admin))
-                        send_message(int(parts[0]), f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b>")
+                        send_message(int(parts), f"🎉 <b>এডমিন আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করেছেন!</b>")
                     except Exception:
                         send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক ফরম্যাট: <code>USER_ID AMOUNT</code>")
                     delete_user_state(user_id)
@@ -647,9 +649,11 @@ def handle_update(update):
                 if isinstance(state_data, dict) and state_data.get("step") == "WAITING_AMOUNT":
                     try:
                         amount = float(text)
-                        if amount <= 0: raise ValueError
+                        if amount < 0.5:
+                            send_message(chat_id, "⚠️ <b>সর্বনিম্ন ডিপোজিট পরিমাণ 0.5 USDT হতে হবে!</b> দয়া করে সঠিক পরিমাণ লিখুন:")
+                            return
                         set_user_state(user_id, {"step": "WAITING_TRX", "amount": amount})
-                        send_message(chat_id, f"<tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Pay (USDT)</b>\n\n🆔 PayID: <code>{BINANCE_PAY_ID}</code>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> পরিমাণ: {amount:.2f} USDT\n\nটাকা পাঠানোর পর আপনার <b>TrxID</b> বা অর্ডার আইডি লিখে পাঠান:", reply_markup=get_back_keyboard())
+                        send_message(chat_id, f"<tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Pay (USDT)</b>\n\n🆔 PayID: <code>{BINANCE_PAY_ID}</code>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> পরিমাণ: {amount:.3f} USDT\n\nটাকা পাঠানোর পর আপনার <b>TrxID</b> বা অর্ডার আইডি লিখে পাঠান:", reply_markup=get_back_keyboard())
                         return
                     except ValueError:
                         send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> সঠিক পরিমাণ লিখুন।")
@@ -666,7 +670,7 @@ def handle_update(update):
                         amt = state_data["amount"]
                         admin_markup = {
                             "inline_keyboard": [
-                                [{"text": f"✅ Approve (${amt:.2f})", "callback_data": f"appusd_{user_id}_{amt}", "style": "success"}],
+                                [{"text": f"✅ Approve (${amt})", "callback_data": f"appusd_{user_id}_{amt}", "style": "success"}],
                                 [{"text": "❌ Reject", "callback_data": f"dep_rej_{user_id}", "style": "danger"}]
                             ]
                         }
@@ -711,11 +715,11 @@ def handle_update(update):
 
             elif text in ["💳 𝗗𝗘𝗣𝗢𝗦𝗜𝗧", "💳 DEPOSIT"]:
                 markup = {"inline_keyboard": [[{"text": "🟡 Binance Pay (USDT)", "callback_data": "dep_binance", "style": "success"}]]}
-                send_message(chat_id, f"<tg-emoji emoji-id=\"5377774889723798543\">💳</tg-emoji> <tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Deposit Gateway:</b>\n\nনিচের মাধ্যম থেকে ডিপোজিট করুন:", reply_markup=markup)
+                send_message(chat_id, f"<tg-emoji emoji-id=\"5377774889723798543\">💳</tg-emoji> <tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Deposit Gateway:</b>\n\nনিচের মাধ্যম থেকে ডিপোজিট করুন (মিনিমাম ০.৫ USDT):", reply_markup=markup)
 
             elif text in ["👤 𝗣𝗥𝗢𝗙𝗜𝗟𝗘", "👤 PROFILE"]:
                 u = get_user(user_id)
-                send_message(chat_id, f"👤 <b>Your Profile Information</b>\n\n🆔 আইডি: <code>{user_id}</code>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> বর্তমান ব্যালেন্স: <b>${format_money_exact(u[2])} USD</b>\n<tg-emoji emoji-id=\"5264713049637409446\">📊</tg-emoji> মোট রিচার্জ: <b>${format_money_exact(u[3])} USD</b>", reply_markup=get_back_keyboard())
+                send_message(chat_id, f"👤 <b>Your Profile Information</b>\n\n🆔 আইডি: <code>{user_id}</code>\n<tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji> বর্তমান ব্যালেন্স: <b>${format_money_exact(u)} USD</b>\n<tg-emoji emoji-id=\"5264713049637409446\">📊</tg-emoji> মোট রিচার্জ: <b>${format_money_exact(u)} USD</b>", reply_markup=get_back_keyboard())
 
             elif text in ["🎧 𝗦𝗨𝗣𝗣𝗢𝗥𝗧", "🎧 SUPPORT"]:
                 send_message(chat_id, f"🎧 <b>যেকোনো প্রয়োজনে যোগাযোগ করুন:</b>\n👉 @{SUPPORT_USERNAME}", reply_markup=get_back_keyboard())
@@ -741,7 +745,7 @@ def handle_update(update):
                 service_title = "NordVPN" if service == "nord" else "DatamaPlus IP"
                 pr = get_vpn_price(service)
                 u_info = get_user(user_id)
-                bal = u_info[2] if u_info else 0.0
+                bal = u_info if u_info else 0.0
 
                 if to_decimal(bal) < to_decimal(pr):
                     edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b>\n{service_title} কিনতে <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{pr:.2f} USD প্রয়োজন। আপনার ব্যালেন্স: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{format_money_exact(bal)} USD।")
@@ -763,7 +767,7 @@ def handle_update(update):
                 service_title = "NordVPN" if service == "nord" else "DatamaPlus IP"
                 pr = get_vpn_price(service)
                 u_info = get_user(user_id)
-                bal = u_info[2] if u_info else 0.0
+                bal = u_info if u_info else 0.0
 
                 if to_decimal(bal) < to_decimal(pr):
                     edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>পর্যাপ্ত ব্যালেন্স নেই!</b>")
@@ -802,7 +806,7 @@ def handle_update(update):
 
             elif data == "confirm_buy_canada":
                 u = get_user(user_id)
-                if to_decimal(u[2]) < current_price:
+                if to_decimal(u) < current_price:
                     edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>অপর্যাপ্ত ব্যালেন্স!</b> প্রয়োজন: <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>{format_money_exact(current_price)} USD")
                     return
                 phone, link = pop_stock_item()
@@ -828,7 +832,7 @@ def handle_update(update):
                 order = get_order_by_phone(phone)
                 if order:
                     try:
-                        resp = requests.get(order[2], headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                        resp = requests.get(order, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                         clean = re.sub(r'<[^>]+>', ' ', resp.text)
                         m = re.search(r'\b(\d{3,4})[-]?(\d{3,4})\b', clean)
                         otp = "".join(m.groups()) if m else None
@@ -865,7 +869,7 @@ def handle_update(update):
 
             elif data == "dep_binance":
                 set_user_state(user_id, {"step": "WAITING_AMOUNT"})
-                edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Deposit Gateway:</b>\n\nকত USDT ডিপোজিট করতে চান সংখ্যাটি লিখে পাঠান:", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_main_menu"}]]})
+                edit_message(chat_id, message_id, f"<tg-emoji emoji-id=\"5269657987219232606\">🟡</tg-emoji> <b>Binance Deposit Gateway:</b>\n\nকত USDT ডিপোজিট করতে চান সংখ্যাটি লিখে পাঠান (মিনিমাম ০.৫ USDT):", reply_markup={"inline_keyboard": [[{"text": "⬅️ Back", "callback_data": "back_to_main_menu"}]]})
 
             elif data == "back_to_main_menu":
                 markup = {"inline_keyboard": [[{"text": "🟡 Binance Pay (USDT)", "callback_data": "dep_binance", "style": "success"}]]}
@@ -925,11 +929,13 @@ def handle_update(update):
                 u_id, amt = int(parts), float(parts)
                 update_balance(u_id, amt)
                 record_deposit_stat(amt)
+                edit_message(chat_id, message_id, cb["message"].get("text", "") + f"\n\n<b>✅ Approved by Admin ({user_id})</b>")
                 send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>Balance credited & recorded!</b>")
                 send_message(u_id, f"🎉 <b>আপনার ডিপোজিট সফল হয়েছে! <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(amt)} USD অ্যাকাউন্টে যোগ করা হয়েছে।</b>")
 
             elif data.startswith("dep_rej_") and is_admin:
                 u_id = int(data.replace("dep_rej_", ""))
+                edit_message(chat_id, message_id, cb["message"].get("text", "") + f"\n\n<b>❌ Rejected by Admin ({user_id})</b>")
                 send_message(u_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>আপনার ডিপোজিট প্রুফ রিজেক্ট করা হয়েছে!</b>")
                 send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>Deposit rejected.</b>")
 
@@ -938,7 +944,7 @@ def handle_update(update):
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    print("🚀 Canada OTP Bot Engine Online with Multi-Admin & Fixed Panel Controls...")
+    print("🚀 Canada OTP Bot Engine Online with Fixed Deposit & Approvals...")
     offset = 0
     while True:
         try:
