@@ -346,6 +346,16 @@ def edit_message(chat_id, message_id, text, reply_markup=None):
         print(f"Error editing message: {e}")
         return {}
 
+def edit_caption(chat_id, message_id, caption, reply_markup=None):
+    payload = {"chat_id": chat_id, "message_id": message_id, "caption": caption, "parse_mode": "HTML"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    try:
+        return requests.post(BASE_URL + "editMessageCaption", json=payload, timeout=10).json()
+    except Exception as e:
+        print(f"Error editing caption: {e}")
+        return {}
+
 def send_photo_to_admin(chat_id, photo_file_id, caption, reply_markup=None):
     payload = {"chat_id": chat_id, "photo": photo_file_id, "caption": caption, "parse_mode": "HTML"}
     if reply_markup:
@@ -1049,13 +1059,21 @@ def handle_update(update):
                 amt = float(parts[2])
                 update_balance(u_id, amt)
                 record_deposit_stat(amt)
-                edit_message(chat_id, message_id, cb["message"].get("text", "") + f"\n\n<b>✅ Approved by Admin ({user_id})</b>")
+                
+                old_caption = cb["message"].get("caption", cb["message"].get("text", ""))
+                new_caption = old_caption + f"\n\n<b>✅ Approved by Admin ({user_id})</b>"
+                edit_caption(chat_id, message_id, new_caption, reply_markup=None)
+                
                 send_message(chat_id, f"<tg-emoji emoji-id=\"5841276284155467413\">✅</tg-emoji> <b>Balance credited & recorded!</b>")
                 send_message(u_id, f"🎉 <b>আপনার ডিপোজিট সফল হয়েছে! <tg-emoji emoji-id=\"5312361253610475399\">💲</tg-emoji>${format_money_exact(amt)} USD অ্যাকাউন্টে যোগ করা হয়েছে।</b>")
 
             elif data.startswith("dep_rej_") and is_admin:
                 u_id = int(data.replace("dep_rej_", ""))
-                edit_message(chat_id, message_id, cb["message"].get("text", "") + f"\n\n<b>❌ Rejected by Admin ({user_id})</b>")
+                
+                old_caption = cb["message"].get("caption", cb["message"].get("text", ""))
+                new_caption = old_caption + f"\n\n<b>❌ Rejected by Admin ({user_id})</b>"
+                edit_caption(chat_id, message_id, new_caption, reply_markup=None)
+                
                 send_message(u_id, f"<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>আপনার ডিপোজিট প্রুফ রিজেক্ট করা হয়েছে!</b>")
                 send_message(chat_id, "<tg-emoji emoji-id=\"5217822164362739968\">❌</tg-emoji> <b>Deposit rejected.</b>")
 
